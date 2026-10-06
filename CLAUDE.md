@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 go test ./core/                          # all tests (one file: core/core_test.go)
 go test ./core/ -run TestSafePath        # single test
 go vet ./...
-go build ./cmd/airdrop                   # macOS binary (cgo, for clipboard)
+go build ./cmd/airdrop                   # native binary (no cgo needed)
 GOOS=windows GOARCH=amd64 go build -o airdrop.exe ./cmd/airdrop   # cross-compile from the Mac
 ```
 
