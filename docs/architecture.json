@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "AirDrop for Windows — Phase 1",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "send-path", "label": "Send path", "focus": ["cli", "send", "tailnet", "server", "savedir"], "note": "A file goes from the CLI over the tailnet into the receiver's save folder." },
+      { "id": "tailscale-seam", "label": "Tailscale seam", "focus": ["send", "discover", "tailscale"], "note": "discover.go is the only code that knows Tailscale exists." },
+      { "id": "trust", "label": "Pairing and trust", "focus": ["send", "sconfig", "server", "guard", "rconfig"], "note": "Tokens are swapped once at pairing; every request is checked against the receiver's own token." }
+    ]
+  },
+  "components": [
+    { "id": "tailscale", "type": "external", "label": "Tailscale CLI", "sublabel": "status --json", "pos": [40, 140], "size": [140, 64] },
+    { "id": "cli", "type": "frontend", "label": "airdrop CLI", "sublabel": "cmd/airdrop", "pos": [40, 300], "size": [140, 64] },
+    { "id": "discover", "type": "backend", "label": "discover.go", "sublabel": "name → IP", "pos": [260, 140], "size": [140, 64], "tag": "Tailscale seam" },
+    { "id": "send", "type": "backend", "label": "send.go", "sublabel": "SendFile · SendText · Pair", "pos": [260, 300], "size": [170, 64] },
+    { "id": "sconfig", "type": "database", "label": "config.json", "sublabel": "peer tokens", "pos": [260, 460], "size": [140, 64] },
+    { "id": "tailnet", "type": "cloud", "label": "Tailnet", "sublabel": "WireGuard · 100.x", "pos": [500, 300], "size": [140, 64] },
+    { "id": "server", "type": "backend", "label": "server.go", "sublabel": "/pair /file /text", "pos": [720, 300], "size": [150, 64], "tag": ":7878" },
+    { "id": "guard", "type": "security", "label": "auth + safePath", "sublabel": "Bearer · no ../ or C:", "pos": [720, 140], "size": [150, 64] },
+    { "id": "rconfig", "type": "database", "label": "config.json", "sublabel": "own token", "pos": [950, 140], "size": [140, 64] },
+    { "id": "savedir", "type": "database", "label": "Save folder", "sublabel": "~/Downloads", "pos": [950, 300], "size": [140, 64] },
+    { "id": "clipboard", "type": "external", "label": "Clipboard", "sublabel": "OnText hook", "pos": [720, 460], "size": [150, 64] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Sender · Mac", "wraps": ["tailscale", "cli", "discover", "send", "sconfig"] },
+    { "kind": "region", "label": "Receiver · Windows", "wraps": ["server", "guard", "rconfig", "savedir", "clipboard"] }
+  ],
+  "connections": [
+    { "id": "cli-send", "from": "cli", "to": "send", "variant": "emphasis" },
+    { "id": "send-discover", "from": "send", "to": "discover", "label": "resolve", "fromSide": "top", "toSide": "bottom" },
+    { "id": "discover-ts", "from": "discover", "to": "tailscale", "label": "exec" },
+    { "id": "send-config", "from": "send", "to": "sconfig", "label": "peer token", "fromSide": "bottom", "toSide": "top" },
+    { "id": "send-tailnet", "from": "send", "to": "tailnet", "label": "HTTP + Bearer", "variant": "emphasis" },
+    { "id": "tailnet-server", "from": "tailnet", "to": "server", "variant": "emphasis" },
+    { "id": "server-guard", "from": "server", "to": "guard", "label": "check", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "id": "guard-config", "from": "guard", "to": "rconfig", "label": "compare" },
+    { "id": "server-save", "from": "server", "to": "savedir", "label": ".part → rename", "variant": "emphasis" },
+    { "id": "server-clip", "from": "server", "to": "clipboard", "label": "/text", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 24 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Tailscale is only the network", "items": ["discover.go is the single seam", "WireGuard encrypts; app speaks plain HTTP", "Phase 5 swaps in mDNS + TLS"] },
+    { "dot": "rose", "title": "Pairing", "items": ["6-digit code printed by serve", "Tokens swapped once, saved per peer", "Locks after 3 wrong codes"] },
+    { "dot": "emerald", "title": "Receive", "items": ["Streams to .part, length-checked, renamed", "Name clash → \"a (1).txt\"", "Text → clipboard via OnText"] }
+  ]
+}

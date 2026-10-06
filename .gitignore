@@ -1,0 +1,4 @@
+/airdrop
+*.exe
+.superpowers/
+docs/*.visual-check.*
