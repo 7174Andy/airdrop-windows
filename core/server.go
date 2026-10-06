@@ -1,6 +1,7 @@
 package core
 
 import (
+	"archive/tar"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/json"
@@ -43,6 +44,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("POST /pair", s.pair)
 	mux.HandleFunc("POST /file", s.auth(s.file))
+	mux.HandleFunc("POST /dir", s.auth(s.dir))
 	mux.HandleFunc("POST /text", s.auth(s.text))
 	return mux
 }
@@ -115,6 +117,83 @@ func (s *Server) file(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("received %s from %s (%d bytes)", dst, r.Header.Get("X-From"), n)
+}
+
+// dir receives a folder as a tar stream. It unpacks into a hidden temp folder and
+// only renames it into place once the whole stream checks out.
+func (s *Server) dir(w http.ResponseWriter, r *http.Request) {
+	dst, err := safePath(s.Cfg.SaveDir, r.URL.Query().Get("name"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmp, err := os.MkdirTemp(filepath.Dir(dst), ".airdrop-*.part")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	files, n, err := untar(tmp, r.Body)
+	if err == nil {
+		dst = uniquePath(dst)
+		err = os.Rename(tmp, dst)
+	}
+	if err != nil {
+		os.RemoveAll(tmp)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	log.Printf("received folder %s from %s (%d files, %d bytes)", dst, r.Header.Get("X-From"), files, n)
+}
+
+// untar extracts regular files and folders into root. Anything else (symlinks,
+// devices) or any path that would leave root fails the whole transfer.
+func untar(root string, r io.Reader) (files int, bytes int64, err error) {
+	tr := tar.NewReader(r)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return files, bytes, nil
+		}
+		if err != nil {
+			return files, bytes, err
+		}
+		p, err := safePath(root, h.Name)
+		if err != nil {
+			return files, bytes, err
+		}
+		switch h.Typeflag {
+		case tar.TypeDir:
+			err = os.MkdirAll(p, 0o755)
+		case tar.TypeReg:
+			var n int64
+			n, err = writeFile(p, tr)
+			files, bytes = files+1, bytes+n
+		default:
+			err = fmt.Errorf("%q: unsupported entry type %q", h.Name, h.Typeflag)
+		}
+		if err != nil {
+			return files, bytes, err
+		}
+	}
+}
+
+func writeFile(p string, r io.Reader) (int64, error) {
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return 0, err
+	}
+	f, err := os.Create(p)
+	if err != nil {
+		return 0, err
+	}
+	n, err := io.Copy(f, r)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return n, err
 }
 
 func (s *Server) text(w http.ResponseWriter, r *http.Request) {

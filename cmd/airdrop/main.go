@@ -22,7 +22,7 @@ const usage = `usage:
   airdrop serve [-addr host:port]   run the receiver
   airdrop peers                     list tailnet peers
   airdrop pair <peer> <code>        pair using the code the peer's receiver shows
-  airdrop send <peer> <file>...     send files
+  airdrop send <peer> <path>...     send files and folders
   airdrop text <peer> [text]        send text to the peer's clipboard (stdin if no text)`
 
 func main() {
