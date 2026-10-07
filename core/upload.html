@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="AirDrop">
+<title>AirDrop</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --accent: #0a84ff; --on-accent: #fff; --bad: #ff3b30;
+    --bg: #f2f2f7; --card: #fff; --text: #111; --muted: #6e6e73; --line: #d1d1d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #000; --card: #1c1c1e; --text: #f5f5f7; --muted: #98989d; --line: #38383a; --bad: #ff453a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 17px -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 32rem; margin: 0 auto; padding: 0 16px calc(120px + env(safe-area-inset-bottom)); }
+  button { font: inherit; cursor: pointer; }
+  input[type=file] { display: none; }
+
+  header { padding: 18px 0 8px; }
+  header small { color: var(--accent); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
+  header h1 { margin: 2px 0; font-size: 30px; letter-spacing: -.5px; overflow-wrap: anywhere; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  .warn { background: var(--card); color: var(--bad); border-radius: 12px; padding: 12px; font-size: 15px; margin-top: 12px; }
+
+  .seg { display: flex; margin: 14px 0 12px; background: var(--line); border-radius: 9px; padding: 2px; }
+  .seg button { flex: 1; border: 0; background: none; color: var(--text); padding: 7px; border-radius: 7px; font-size: 15px; }
+  .seg button[aria-selected=true] { background: var(--card); color: var(--accent); font-weight: 600; box-shadow: 0 1px 3px #0002; }
+
+  .list { background: var(--card); border-radius: 12px; overflow: hidden; }
+  .item { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .item:last-child { border-bottom: 0; }
+  .thumb { width: 44px; height: 44px; border-radius: 8px; background: var(--bg); object-fit: cover; display: grid; place-items: center; flex: none; font-size: 20px; }
+  .grow { flex: 1; min-width: 0; }
+  .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+  .info { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .info.ok { color: var(--accent); }
+  .info.bad { color: var(--bad); }
+  .x { border: 0; background: none; color: var(--muted); font-size: 22px; padding: 0 4px; }
+  progress { width: 100%; height: 4px; accent-color: var(--accent); }
+  .empty { text-align: center; color: var(--muted); padding: 32px 0 6px; font-size: 15px; }
+  .add { display: block; text-align: center; color: var(--accent); padding: 14px; background: var(--card); border-radius: 12px; margin-top: 12px; }
+  textarea { width: 100%; min-height: 200px; font: inherit; border: 0; border-radius: 12px; padding: 12px; background: var(--card); color: var(--text); }
+
+  footer { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--bg) 30%); }
+  footer > * { max-width: 32rem; margin: 0 auto; }
+  .total { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 6px; min-height: 18px; }
+  .total.bad { color: var(--bad); }
+  #send { display: block; width: 100%; border: 0; border-radius: 14px; padding: 15px; background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  #send:disabled { opacity: .4; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <small>Sending to</small>
+    <h1 id="dev">your computer</h1>
+    <p>Files land in Downloads · text goes to the clipboard</p>
+    <div id="nokey" class="warn" hidden>Missing key. Open this page by scanning the QR code that <code>airdrop serve</code> shows.</div>
+  </header>
+
+  <div class="seg" role="tablist">
+    <button role="tab" aria-selected="true" data-pane="files">Files</button>
+    <button role="tab" aria-selected="false" data-pane="text">Text</button>
+  </div>
+
+  <section id="files">
+    <div id="empty" class="empty">Nothing queued yet.</div>
+    <div id="list" class="list" hidden></div>
+    <label class="add">＋ Add photos or files<input id="pick" type="file" multiple></label>
+  </section>
+  <section id="text" hidden>
+    <textarea id="msg" placeholder="Paste or type text for the clipboard…"></textarea>
+  </section>
+</main>
+
+<footer>
+  <div id="total" class="total"></div>
+  <button id="send" disabled>Send</button>
+</footer>
+
+<script>
+// The key comes from the QR code's ?t= and is remembered so a Home Screen shortcut keeps working.
+const q = new URLSearchParams(location.search).get('t');
+let key = q;
+try { if (q) localStorage.setItem('t', q); else key = localStorage.getItem('t'); } catch (e) {}
+const $ = id => document.getElementById(id);
+if (!key) $('nokey').hidden = false;
+fetch('/ping').then(r => r.json()).then(j => { $('dev').textContent = j.name; }).catch(() => {});
+
+const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB';
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+function post(path, body, onProgress) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest(); // XHR, not fetch: fetch has no upload progress
+    x.open('POST', path);
+    x.setRequestHeader('Authorization', 'Bearer ' + key);
+    x.setRequestHeader('X-From', 'iPhone');
+    if (onProgress) x.upload.onprogress = e => e.lengthComputable && onProgress(e.loaded / e.total);
+    x.onload = () => x.status === 200 ? resolve() : reject(new Error(x.responseText.trim() || 'HTTP ' + x.status));
+    x.onerror = () => reject(new Error('Can’t reach the computer. Is Tailscale on?'));
+    x.send(body);
+  });
+}
+
+// queue item: { file, url, state: 'queued' | 'sending' | 'sent' | 'failed', progress, error }
+const queue = [];
+let busy = false;
+const textMode = () => !$('text').hidden;
+
+function render() {
+  const list = $('list');
+  list.replaceChildren();
+  queue.forEach((it, i) => {
+    const row = el('div', 'item');
+    if (it.url) { const img = el('img', 'thumb'); img.src = it.url; img.alt = ''; row.append(img); }
+    else row.append(el('div', 'thumb', '📄'));
+    const grow = el('div', 'grow');
+    grow.append(el('div', 'name', it.file.name));
+    const info = { queued: fmt(it.file.size), sending: 'Sending…', sent: '✓ Sent', failed: '✗ ' + it.error }[it.state];
+    grow.append(el('div', 'info' + (it.state === 'sent' ? ' ok' : it.state === 'failed' ? ' bad' : ''), info));
+    if (it.state === 'sending') { const p = el('progress'); p.value = it.progress; grow.append(p); }
+    row.append(grow);
+    if (!busy && it.state !== 'sent') {
+      const x = el('button', 'x', '×'); x.setAttribute('aria-label', 'Remove ' + it.file.name);
+      x.onclick = () => { if (it.url) URL.revokeObjectURL(it.url); queue.splice(i, 1); render(); };
+      row.append(x);
+    }
+    list.append(row);
+  });
+  list.hidden = !queue.length;
+  $('empty').hidden = !!queue.length;
+
+  const send = $('send'), total = $('total');
+  if (textMode()) {
+    send.textContent = 'Send to clipboard';
+    send.disabled = busy || !$('msg').value || !key;
+    return;
+  }
+  const todo = queue.filter(it => it.state === 'queued' || it.state === 'failed');
+  send.textContent = busy ? 'Sending…' : todo.length ? `Send ${todo.length} item${todo.length > 1 ? 's' : ''}` : 'Send';
+  send.disabled = busy || !todo.length || !key;
+  if (!busy && todo.length) { total.className = 'total'; total.textContent = fmt(todo.reduce((a, it) => a + it.file.size, 0)) + ' total'; }
+}
+
+function setStatus(text, bad) { $('total').className = 'total' + (bad ? ' bad' : ''); $('total').textContent = text; }
+
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.seg button').forEach(o => o.setAttribute('aria-selected', o === b));
+  $('files').hidden = b.dataset.pane !== 'files';
+  $('text').hidden = b.dataset.pane !== 'text';
+  setStatus('');
+  render();
+});
+
+$('pick').onchange = e => {
+  for (const file of e.target.files) queue.push({ file, url: file.type.startsWith('image/') ? URL.createObjectURL(file) : null, state: 'queued' });
+  e.target.value = '';
+  setStatus('');
+  render();
+};
+$('msg').oninput = render;
+
+$('send').onclick = async () => {
+  busy = true;
+  if (textMode()) {
+    render();
+    try { await post('/text', $('msg').value); $('msg').value = ''; setStatus('✓ Copied to the computer’s clipboard'); }
+    catch (err) { setStatus('✗ ' + err.message, true); }
+    busy = false; render();
+    return;
+  }
+  let failed = 0;
+  for (const it of queue.filter(it => it.state === 'queued' || it.state === 'failed')) { // one at a time keeps the phone's memory and radio happy
+    it.state = 'sending'; it.progress = 0; render();
+    try {
+      await post('/file?name=' + encodeURIComponent(it.file.name), it.file, p => { it.progress = p; render(); });
+      it.state = 'sent';
+    } catch (err) {
+      it.state = 'failed'; it.error = err.message; failed++;
+    }
+    render();
+  }
+  busy = false;
+  render();
+  setStatus(failed ? `${failed} failed. Tap Send to retry.` : '✓ All sent', failed > 0);
+};
+
+render();
+</script>
+</body>
+</html>

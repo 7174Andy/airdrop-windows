@@ -3,6 +3,8 @@ package core
 import (
 	"archive/tar"
 	"bytes"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -160,5 +162,28 @@ func TestDirRejectsEvilTar(t *testing.T) {
 	}
 	if left, _ := os.ReadDir(a.SaveDir); len(left) != 0 {
 		t.Errorf("leftovers in save folder: %v", left)
+	}
+}
+
+// The iPhone page is public (it holds no secrets); what it uploads still needs the token.
+func TestUploadPage(t *testing.T) {
+	a := newCfg(t, "A")
+	ts := httptest.NewServer(NewServer(a).Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(body), `type="file"`) || strings.Contains(string(body), a.Token) {
+		t.Fatalf("GET /: %d, page ok=%v, leaks token=%v", resp.StatusCode, strings.Contains(string(body), `type="file"`), strings.Contains(string(body), a.Token))
+	}
+	if resp, _ := http.Get(ts.URL + "/nope"); resp.StatusCode != 404 {
+		t.Fatalf("GET /nope: %d", resp.StatusCode)
+	}
+	if !strings.HasSuffix(UploadURL("100.1.2.3:7878", a.Token), "100.1.2.3:7878/?t="+a.Token) {
+		t.Fatal(UploadURL("100.1.2.3:7878", a.Token))
 	}
 }

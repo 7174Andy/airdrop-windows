@@ -2,7 +2,10 @@ module airdrop
 
 go 1.27.1
 
-require golang.design/x/clipboard v0.11.0
+require (
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+	golang.design/x/clipboard v0.11.0
+)
 
 require (
 	github.com/ebitengine/purego v0.10.1 // indirect

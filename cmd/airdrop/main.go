@@ -15,6 +15,7 @@ import (
 
 	"airdrop/core"
 
+	"github.com/skip2/go-qrcode"
 	"golang.design/x/clipboard"
 )
 
@@ -120,7 +121,10 @@ func serve(cfg *core.Config, args []string) {
 	}
 
 	log.Printf("%s listening on %s, saving to %s", cfg.Name, *addr, cfg.SaveDir)
-	log.Printf("pair code: %s   (on the other device: airdrop pair %s %s)", s.PairCode(), cfg.Name, s.PairCode())
+	log.Printf("pair code: %s   (on the other device: airdrop pair %q %s)", s.PairCode(), cfg.Name, s.PairCode())
+	if qr, err := qrcode.New(core.UploadURL(*addr, cfg.Token), qrcode.Low); err == nil {
+		log.Printf("iPhone (with Tailscale on): scan to open the upload page\n%s", qr.ToSmallString(false))
+	}
 	srv := &http.Server{Addr: *addr, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	log.Fatal(srv.ListenAndServe())
 }

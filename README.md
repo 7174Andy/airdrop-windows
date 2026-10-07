@@ -14,6 +14,7 @@ Tailscale is used only as the network. It finds peers and encrypts traffic with 
   - Name clashes become `name (1).ext`.
   - Paths that would escape the save folder are rejected: `../`, absolute paths, `C:\`, and symlinks.
 - **Tailnet only.** The receiver listens only on the device's Tailscale IP.
+- **iPhone → computer.** `airdrop serve` prints a QR code. Scan it with the iPhone's camera (Tailscale must be on) to open an upload page in Safari for photos, videos, files, and text. Use *Share → Add to Home Screen* to keep it one tap away.
 - **Mac ↔ Windows.** One codebase, cross-compiled from macOS.
 
 ## Usage
@@ -36,7 +37,7 @@ Received files go to `~/Downloads`. To change that, edit `save_dir` in the confi
 
 - [x] **Phase 1:** core and CLI. Pairing, sending files and text, peer discovery.
 - [x] **Phase 2:** folder send with a streamed tar, plus tests that unsafe paths are refused.
-- [ ] **Phase 3:** sending from an iPhone. The receiver serves an upload page that the phone opens in Safari by scanning a QR code.
+- [x] **Phase 3:** sending from an iPhone. An upload page, opened by scanning a QR code.
 - [ ] **Phase 4:** desktop app (Wails).
   - Tray icon, drag and drop, notifications, and an Accept/Decline prompt.
   - Starts at login.
@@ -70,7 +71,8 @@ go vet ./...
 | Path | Purpose |
 |---|---|
 | `core/discover.go` | The only code that talks to Tailscale. Turns peer names into IPs. |
-| `core/server.go` | The receiver (`/ping`, `/pair`, `/file`, `/dir`, `/text`), plus `safePath`, which every incoming file name passes through. |
+| `core/server.go` | The receiver (`/`, `/ping`, `/pair`, `/file`, `/dir`, `/text`), plus `safePath`, which every incoming file name passes through. |
+| `core/upload.html` | The iPhone upload page, embedded in the binary. |
 | `core/send.go` | The sender, and the client side of pairing. |
 | `core/config.go` | Device name, token, paired peers, save folder. |
 | `cmd/airdrop` | The CLI. |

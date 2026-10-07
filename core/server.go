@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"crypto/rand"
 	"crypto/subtle"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +21,15 @@ import (
 )
 
 const maxPairFails = 3
+
+//go:embed upload.html
+var uploadPage []byte
+
+// UploadURL is the link a phone opens (via QR code) to send to this receiver.
+// It carries the receiver's token, so anyone who has it can send here.
+func UploadURL(hostPort, token string) string {
+	return "http://" + hostPort + "/?t=" + url.QueryEscape(token)
+}
 
 type Server struct {
 	Cfg    *Config
@@ -41,6 +52,10 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ping", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"name": s.Cfg.Name})
+	})
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(uploadPage)
 	})
 	mux.HandleFunc("POST /pair", s.pair)
 	mux.HandleFunc("POST /file", s.auth(s.file))

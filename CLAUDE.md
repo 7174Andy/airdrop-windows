@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-"AirDrop for Windows": send files and clipboard text between Mac, Windows, and (later) iPhone over a Tailscale tailnet. Go module `airdrop`. The roadmap lives in `PLAN.md` (phases 1–5); phases 1 (core + CLI) and 2 (folder send) are done.
+"AirDrop for Windows": send files and clipboard text between Mac, Windows, and (later) iPhone over a Tailscale tailnet. Go module `airdrop`. The roadmap lives in `PLAN.md` (phases 1–5); phases 1 (core + CLI), 2 (folder send), and 3 (iPhone upload page) are done.
 
 ## Commands
 
@@ -26,6 +26,7 @@ CLI: `airdrop serve [-addr host:port] | peers | pair <peer> <code> | send <peer>
 - **`safePath` in `core/server.go` is the trust boundary** for sender-supplied file names. It normalizes `\` to `/`, rejects `:` (drive letters, NTFS streams), and requires `filepath.IsLocal`. Every endpoint that writes files must route through it: `/file` for its name, `/dir` for the folder name *and* every tar entry.
 - Received files stream to a `.airdrop-*.part` temp file in the target dir, are length-checked against Content-Length, then renamed. A name that already exists gets a ` (1)` suffix.
 - **Folders** (`POST /dir?name=X`): the sender streams a tar through an `io.Pipe` (no temp file, chunked, no Content-Length). The receiver unpacks into a hidden `.airdrop-*.part` dir and renames it into place only after the whole stream is valid, so a bad entry anywhere discards everything. Only regular files and dirs are allowed: the sender skips symlinks/devices, and the receiver rejects the whole transfer if it sees one. File modes are not preserved.
+- **iPhone page** (`GET /`, `core/upload.html` via `go:embed`): a static page with no secrets. The token arrives in the URL's `?t=` (from the QR code that `serve` prints, built by `core.UploadURL`) and is kept in `localStorage`, then sent as a normal Bearer header to `/file` and `/text`. So the phone needs no new endpoints, and the QR code is equivalent to the receiver's token. Uploads use XHR rather than fetch, for upload progress.
 
 Config lives at `os.UserConfigDir()/airdrop/config.json` (mode 0600, contains tokens). Note that `LoadConfig` writes this file, and on first run it shells out to Tailscale to pick the name.
 
