@@ -38,9 +38,9 @@ Received files go to `~/Downloads`. To change that, edit `save_dir` in the confi
 - [x] **Phase 1:** core and CLI. Pairing, sending files and text, peer discovery.
 - [x] **Phase 2:** folder send with a streamed tar, plus tests that unsafe paths are refused.
 - [x] **Phase 3:** sending from an iPhone. An upload page, opened by scanning a QR code.
-- [ ] **Phase 4:** desktop app (Wails v3).
+- [x] **Phase 4:** desktop app (Wails v3).
   - [x] 4a: a background tray receiver with Receive / Receive for 10 minutes / Off, plus an optional window (drag-drop onto a device, clipboard send, pairing, iPhone QR code), notifications, and an Accept/Decline prompt.
-  - [ ] 4b: start at login, a proper macOS app bundle and icon, Windows "Send to" and a macOS Finder Quick Action.
+  - [x] 4b: start at login, a macOS app bundle and icon, and a right-click entry (Windows "Send to", macOS Finder Quick Action). Both are switches in the window's Settings.
 - [ ] **Phase 5:** life without Tailscale.
   - Direct LAN connection with mDNS and pinned TLS.
   - A self-hosted relay for networks that block device-to-device traffic.
@@ -58,15 +58,19 @@ The full design is in [PLAN.md](PLAN.md). The architecture diagram is in [docs/a
 On macOS, `brew install go`. Tailscale's CLI is found automatically, even if only the app is installed.
 
 ```bash
+./build.sh [mac|windows]                                          # dev build of the CLI + app for both OSes into dist/
 go build ./cmd/airdrop                                            # build for this machine
 GOOS=windows GOARCH=amd64 go build -o airdrop.exe ./cmd/airdrop   # Windows build from macOS
 go test ./core/                                                   # run all tests
 go test ./core/ -run TestSendDir                                  # run one test
+go test ./app/                                                    # desktop app check (macOS)
 go vet ./...
 
 go build -o airdrop-app ./app                                         # desktop app (macOS needs Xcode command-line tools: cgo)
 GOOS=windows GOARCH=amd64 go build -ldflags=-H=windowsgui -o airdrop-app.exe ./app
 ./airdrop-app --background                                            # start in the tray without opening the window
+app/bundle.sh                                                         # macOS: build airdrop.app (native notifications, icon)
+app/icons/make.sh                                                     # regenerate icons after editing app/icons/*.svg
 ```
 
 **Layout**
@@ -79,6 +83,6 @@ GOOS=windows GOARCH=amd64 go build -ldflags=-H=windowsgui -o airdrop-app.exe ./a
 | `core/send.go` | The sender, and the client side of pairing. |
 | `core/config.go` | Device name, token, paired peers, save folder. |
 | `cmd/airdrop` | The CLI. |
-| `app/` | The desktop app: tray + receiver (`main.go`), window bindings and receiver hooks (`app.go`), window UI (`frontend/index.html`). |
+| `app/` | The desktop app: tray + receiver (`main.go`), window bindings and receiver hooks (`app.go`), window UI (`frontend/index.html`), login item + right-click entry per OS (`desktop_darwin.go`, `desktop_windows.go`), icons (`icons/`, plus the generated `rsrc_windows_*.syso` for the .exe). |
 
 **Testing between two machines:** run `airdrop serve` on one device, then `airdrop pair` and `airdrop send` from the other. To confirm a file arrived intact, compare hashes: `shasum -a 256 <file>` on macOS and `Get-FileHash <file>` on Windows. When Windows asks, allow `airdrop.exe` through the firewall.

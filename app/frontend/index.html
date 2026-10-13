@@ -46,6 +46,8 @@
   .status { font-size: 12px; margin-top: 6px; color: var(--muted); overflow-wrap: anywhere; }
   .status.bad { color: var(--bad); }
   .empty { padding: 16px; text-align: center; color: var(--muted); }
+  .pending { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 15%, var(--card)); }
+  .pending span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
   .recv { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); align-items: baseline; }
   .recv:last-child { border-bottom: 0; }
@@ -83,6 +85,7 @@
   </header>
 
   <h2>Send to</h2>
+  <div id="pending" class="pending" hidden><span></span><button id="unpend">Cancel</button></div>
   <div id="peers" class="card"><div class="empty">Looking for devices…</div></div>
 
   <h2>Received</h2>
@@ -98,6 +101,8 @@
   <h2>Settings</h2>
   <div class="card">
     <label class="setting">Ask before receiving files<span class="switch"><input id="ask" type="checkbox"><span></span></span></label>
+    <label class="setting">Start at login<span class="switch"><input id="login" type="checkbox"><span></span></span></label>
+    <label class="setting">Add “Send with airdrop” to the right-click menu<span class="switch"><input id="menu" type="checkbox"><span></span></span></label>
     <div class="setting">Received files<button id="opendir">Open folder</button></div>
   </div>
 </main>
@@ -114,9 +119,12 @@ async function loadInfo() {
   $('me').textContent = info.Name;
   const sub = $('sub');
   sub.replaceChildren();
+  $('ask').checked = !info.AutoAccept;
+  $('login').checked = info.StartAtLogin;
+  $('menu').checked = info.ContextMenu;
+  showPending(info.Pending);
   if (info.ServerError) { sub.className = 'sub bad'; sub.textContent = info.ServerError; return; }
   if (info.QR) $('qr').src = info.QR;
-  $('ask').checked = !info.AutoAccept;
   pairCode = info.PairCode;
   showMode(info.Mode, info.Until);
 }
@@ -134,8 +142,23 @@ function showMode(mode, until) {
   document.querySelectorAll('#mode button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === pressed));
 }
 document.querySelectorAll('#mode button').forEach(b => b.onclick = () => call('SetReceiving', b.dataset.mode));
-Events.On('state', ev => { if (!$('sub').classList.contains('bad')) showMode(ev.data.mode, ev.data.until); });
+Events.On('state', ev => { if ($('sub').classList.contains('bad')) loadInfo(); else showMode(ev.data.mode, ev.data.until); }); // reload once the receiver comes up
 $('ask').onchange = e => call('SetAutoAccept', !e.target.checked);
+$('login').onchange = e => call('SetStartAtLogin', e.target.checked).catch(() => { e.target.checked = !e.target.checked; });
+$('menu').onchange = e => call('SetContextMenu', e.target.checked).catch(() => { e.target.checked = !e.target.checked; });
+
+// ---- files from the right-click menu: they wait here until you click a device
+let pending = [];
+function showPending(files) {
+  pending = files || [];
+  const box = $('pending');
+  box.hidden = !pending.length;
+  const name = f => f.split(/[\\/]/).pop();
+  box.querySelector('span').textContent = pending.length === 1 ? `Send “${name(pending[0])}” to…` : `Send ${pending.length} items to…`;
+  lastPeers = ''; refreshPeers(); // swap the peer buttons
+}
+Events.On('pending', ev => showPending(ev.data));
+$('unpend').onclick = () => call('ClearPending');
 $('opendir').onclick = () => call('OpenSaveDir');
 
 // ---- peers
@@ -151,8 +174,8 @@ function peerRow(p) {
   if (p.Paired) {
     row.setAttribute('data-file-drop-target', '');
     row.setAttribute('data-peer', p.Name);
-    const choose = el('button', 'primary', 'Choose files…');
-    choose.onclick = () => call('ChooseAndSend', p.Name).catch(() => {});
+    const choose = el('button', 'primary', pending.length ? 'Send here' : 'Choose files…');
+    choose.onclick = () => call(pending.length ? 'SendPending' : 'ChooseAndSend', p.Name).catch(() => {});
     const clip = el('button', null, 'Send clipboard');
     clip.onclick = () => call('SendClipboard', p.Name).catch(() => {});
     actions.append(choose, clip, el('span', 'hint', 'or drop files here'));

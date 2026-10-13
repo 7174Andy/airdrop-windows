@@ -6,7 +6,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -41,11 +43,13 @@ type App struct {
 	askMu    sync.Mutex // one Accept/Decline dialog at a time
 	mu       sync.Mutex
 	accepted map[string]time.Time // sender -> last time the user accepted them
+	pending  []string             // files from the right-click menu, waiting for you to pick a device
 }
 
 type Info struct {
 	Name, Addr, PairCode, QR, SaveDir, ServerError string
-	AutoAccept                                     bool
+	AutoAccept, StartAtLogin, ContextMenu          bool
+	Pending                                        []string // files waiting to be sent
 	Mode                                           string // "on", "until", "off"
 	Until                                          string // "22:40" when Mode is "until"
 }
@@ -55,27 +59,44 @@ type PeerView struct {
 	Online, Paired bool
 }
 
-// start launches the receiver on this device's Tailscale IP.
+// start launches the receiver on this device's Tailscale IP. At login Tailscale may
+// not be up yet, so it keeps retrying; the 15s tick in main picks up the new state.
 func (a *App) start() {
 	a.srv = core.NewServer(a.cfg)
 	a.srv.Accept = a.accept
 	a.srv.OnReceive = a.onReceive
 	a.srv.OnText = a.onText
+	go func() {
+		for {
+			if ln := a.listen(); ln != nil {
+				log.Printf("receiving on %s", ln.Addr())
+				http.Serve(ln, a.srv.Handler())
+				return
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}()
+}
 
+func (a *App) listen() net.Listener {
+	var ln net.Listener
+	var addr, msg string
 	self, err := core.Self()
 	if err != nil || self.IP == "" {
-		a.serverErr = fmt.Sprintf("Can't find this device's Tailscale IP. Is Tailscale running? (%v)", err)
-		return
+		msg = fmt.Sprintf("Can't find this device's Tailscale IP. Is Tailscale running? (%v)", err)
+	} else {
+		addr = net.JoinHostPort(self.IP, strconv.Itoa(a.cfg.Port))
+		if ln, err = net.Listen("tcp", addr); err != nil {
+			addr, msg = "", "Can't start the receiver: "+err.Error()
+		}
 	}
-	a.addr = net.JoinHostPort(self.IP, strconv.Itoa(a.cfg.Port))
-	ln, err := net.Listen("tcp", a.addr)
-	if err != nil {
-		a.serverErr = "Can't start the receiver: " + err.Error()
-		return
-	}
-	log.Printf("receiving on %s", a.addr)
-	go http.Serve(ln, a.srv.Handler())
+	a.mu.Lock()
+	a.addr, a.serverErr = addr, msg
+	a.mu.Unlock()
+	return ln
 }
+
+func (a *App) server() (addr, errMsg string) { a.mu.Lock(); defer a.mu.Unlock(); return a.addr, a.serverErr }
 
 // ---- window
 
@@ -137,7 +158,7 @@ func (a *App) mode() (mode, until string) {
 func (a *App) refreshState() {
 	mode, until := a.mode()
 	label := map[string]string{"on": "● Receiving", "until": "● Receiving until " + until, "off": "○ Not receiving"}[mode]
-	if a.serverErr != "" {
+	if _, e := a.server(); e != "" {
 		label = "⚠ Receiver not running"
 	}
 	if a.trayMenu != nil {
@@ -154,10 +175,11 @@ func (a *App) refreshState() {
 
 func (a *App) Info() Info {
 	mode, until := a.mode()
-	in := Info{Name: a.cfg.Name, Addr: a.addr, SaveDir: a.cfg.SaveDir, AutoAccept: a.cfg.AutoAccept, ServerError: a.serverErr, Mode: mode, Until: until}
-	if a.srv != nil && a.addr != "" {
+	addr, serverErr := a.server()
+	in := Info{Name: a.cfg.Name, Addr: addr, SaveDir: a.cfg.SaveDir, AutoAccept: a.cfg.AutoAccept, StartAtLogin: loginEnabled(), ContextMenu: contextMenuEnabled(), Pending: a.pendingFiles(), ServerError: serverErr, Mode: mode, Until: until}
+	if addr != "" {
 		in.PairCode = a.srv.PairCode()
-		if png, err := qrcode.Encode(core.UploadURL(a.addr, a.cfg.Token), qrcode.Medium, 256); err == nil {
+		if png, err := qrcode.Encode(core.UploadURL(addr, a.cfg.Token), qrcode.Medium, 256); err == nil {
 			in.QR = "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
 		}
 	}
@@ -257,6 +279,71 @@ func (a *App) SendClipboard(name string) error {
 }
 
 func (a *App) SetAutoAccept(on bool) error { return a.cfg.SetAutoAccept(on) }
+
+// SetStartAtLogin adds or removes the OS login item that runs this binary with --background.
+// ponytail: it and the right-click entry point at wherever this binary is now; switch them
+// off and on again after moving it.
+func (a *App) SetStartAtLogin(on bool) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	return setLogin(on, exe)
+}
+
+// SetContextMenu adds or removes the right-click entry (Windows "Send to", macOS Quick Action)
+// that runs this binary with --send <files>.
+func (a *App) SetContextMenu(on bool) error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	return setContextMenu(on, exe)
+}
+
+// ---- files from the right-click menu
+
+// queue takes the files after --send in args (this launch's, or a second launch's that the
+// single-instance lock forwarded here) and holds them until you click a device.
+func (a *App) queue(args []string, dir string) bool {
+	i := slices.Index(args, "--send")
+	if i < 0 || i == len(args)-1 {
+		return false
+	}
+	files := slices.Clone(args[i+1:])
+	for j, f := range files {
+		if !filepath.IsAbs(f) {
+			files[j] = filepath.Join(dir, f)
+		}
+	}
+	a.mu.Lock()
+	a.pending = files
+	a.mu.Unlock()
+	return true
+}
+
+func (a *App) pendingFiles() []string { a.mu.Lock(); defer a.mu.Unlock(); return a.pending }
+
+func (a *App) emitPending() { a.app.Event.Emit("pending", a.pendingFiles()) }
+
+func (a *App) SendPending(name string) error {
+	a.mu.Lock()
+	files := a.pending
+	a.pending = nil
+	a.mu.Unlock()
+	a.emitPending()
+	if len(files) == 0 {
+		return nil
+	}
+	return a.Send(name, files)
+}
+
+func (a *App) ClearPending() {
+	a.mu.Lock()
+	a.pending = nil
+	a.mu.Unlock()
+	a.emitPending()
+}
 
 func (a *App) OpenSaveDir() error { return a.app.Browser.OpenFile(a.cfg.SaveDir) }
 

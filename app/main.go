@@ -2,7 +2,8 @@
 // the background; the window is created only when you open it and destroyed when
 // you close it, so receiving never depends on the window being open.
 //
-// Run with --background (as the login item will) to start without opening the window.
+// Run with --background (as the login item does) to start without opening the window, and
+// with --send <files> (as the right-click entry does) to open it with those files ready to send.
 package main
 
 import (
@@ -19,12 +20,18 @@ import (
 	"airdrop/core"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/icons"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
 //go:embed frontend
 var frontend embed.FS
+
+var (
+	//go:embed icons/tray-mac.png
+	trayMac []byte
+	//go:embed icons/tray.png
+	trayWin []byte
+)
 
 func main() {
 	path, err := core.ConfigPath()
@@ -52,7 +59,14 @@ func main() {
 		Windows:     application.WindowsOptions{DisableQuitOnLastWindowClosed: true},
 		SingleInstance: &application.SingleInstanceOptions{ // opening the app again shows the running one
 			UniqueID:               "dev.airdrop-windows.app",
-			OnSecondInstanceLaunch: func(application.SecondInstanceData) { application.InvokeAsync(a.ShowWindow) },
+			OnSecondInstanceLaunch: func(d application.SecondInstanceData) {
+				application.InvokeAsync(func() {
+					if a.queue(d.Args, d.WorkingDir) { // right-click → Send with airdrop
+						a.emitPending()
+					}
+					a.ShowWindow()
+				})
+			},
 		},
 	})
 	a.app = app
@@ -64,7 +78,8 @@ func main() {
 			application.InvokeAsync(a.refreshState)
 		}
 	}()
-	if !slices.Contains(os.Args[1:], "--background") {
+	wd, _ := os.Getwd()
+	if a.queue(os.Args, wd) || !slices.Contains(os.Args[1:], "--background") {
 		a.ShowWindow()
 	}
 	if err := app.Run(); err != nil {
@@ -75,9 +90,9 @@ func main() {
 func (a *App) buildTray() {
 	tray := a.app.SystemTray.New()
 	if runtime.GOOS == "darwin" {
-		tray.SetTemplateIcon(icons.SystrayMacTemplate)
+		tray.SetTemplateIcon(trayMac)
 	} else {
-		tray.SetIcon(icons.SystrayLight)
+		tray.SetIcon(trayWin)
 	}
 	tray.SetTooltip("airdrop")
 

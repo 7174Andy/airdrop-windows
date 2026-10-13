@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d9bff"/>
+      <stop offset="1" stop-color="#0062db"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#g)"/>
+  <!-- Bridge: two devices, an arc carrying something from one to the other -->
+  <g fill="none" stroke="#fff" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M340 500Q512 160 684 500"/>
+    <path d="M709 393L684 500L583 457"/>
+  </g>
+  <circle cx="340" cy="640" r="62" fill="#fff"/>
+  <circle cx="684" cy="640" r="62" fill="#fff"/>
+</svg>

@@ -58,7 +58,7 @@ Revised during phase 4: receiving must not depend on an app being open.
 - **Window (optional):** the same receiving switch, peer list with drag-drop onto a peer, Choose files…, Send clipboard, pairing, a received list, the iPhone QR code, and "Ask before receiving".
 - **Single instance:** launching the app again opens the running app's window.
 - **Notifications:** the Wails notifications service on Windows. On macOS it needs a bundled `.app`, so until packaging the app falls back to `osascript`.
-- **Phase 4b:** start at login (LaunchAgent / Windows Startup, running `--background`), a macOS `.app` bundle and app icon, Windows "Send to" and macOS Finder Quick Action (→ `airdrop send`).
+- **Phase 4b (done):** start at login (LaunchAgent / HKCU `Run` key, running `--background`), a macOS `.app` bundle (`app/bundle.sh`) and app icon, Windows "Send to" and macOS Finder Quick Action. The right-click entry runs the *app* with `--send <files>` rather than the CLI: the running app gets the files and you pick a device in its window, so one entry covers every peer.
 
 ## Build phases
 1. **Core + CLI**: config, pairing, server `/file` `/text` `/ping`, send, discover. Check Mac↔Windows over the tailnet.

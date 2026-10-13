@@ -3,3 +3,5 @@
 .superpowers/
 docs/*.visual-check.*
 /airdrop-app
+/airdrop.app
+/dist/
