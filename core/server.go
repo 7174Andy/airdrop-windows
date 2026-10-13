@@ -35,6 +35,12 @@ type Server struct {
 	Cfg    *Config
 	OnText func(from, text string) // e.g. put it on the clipboard
 
+	// Accept, if set, is asked before a file or folder is read; false declines it.
+	// what is e.g. "photo.jpg (2.1 MB)" or "folder photos". It may block (a dialog).
+	Accept func(from, what string) bool
+	// OnReceive, if set, hears about every file or folder that landed.
+	OnReceive func(from, path string)
+
 	mu        sync.Mutex
 	pairCode  string
 	pairFails int
@@ -51,16 +57,16 @@ func (s *Server) PairCode() string { return s.pairCode }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ping", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]string{"name": s.Cfg.Name})
+		json.NewEncoder(w).Encode(map[string]any{"name": s.Cfg.Name, "receiving": s.Cfg.Receiving()})
 	})
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(uploadPage)
 	})
-	mux.HandleFunc("POST /pair", s.pair)
-	mux.HandleFunc("POST /file", s.auth(s.file))
-	mux.HandleFunc("POST /dir", s.auth(s.dir))
-	mux.HandleFunc("POST /text", s.auth(s.text))
+	mux.HandleFunc("POST /pair", s.on(s.pair))
+	mux.HandleFunc("POST /file", s.on(s.auth(s.file)))
+	mux.HandleFunc("POST /dir", s.on(s.auth(s.dir)))
+	mux.HandleFunc("POST /text", s.on(s.auth(s.text)))
 	return mux
 }
 
@@ -91,6 +97,17 @@ func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(pairMsg{Name: s.Cfg.Name, Token: s.Cfg.Token})
 }
 
+// on refuses everything except /ping and the upload page while receiving is switched off.
+func (s *Server) on(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.Cfg.Receiving() {
+			http.Error(w, s.Cfg.Name+" is not receiving right now", http.StatusServiceUnavailable)
+			return
+		}
+		h(w, r)
+	}
+}
+
 func (s *Server) auth(h http.HandlerFunc) http.HandlerFunc {
 	want := []byte("Bearer " + s.Cfg.Token)
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -106,6 +123,9 @@ func (s *Server) file(w http.ResponseWriter, r *http.Request) {
 	dst, err := safePath(s.Cfg.SaveDir, r.URL.Query().Get("name"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !s.accept(w, r, fmt.Sprintf("%s (%s)", filepath.Base(dst), FormatSize(r.ContentLength))) {
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -132,6 +152,7 @@ func (s *Server) file(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("received %s from %s (%d bytes)", dst, r.Header.Get("X-From"), n)
+	s.received(r, dst)
 }
 
 // dir receives a folder as a tar stream. It unpacks into a hidden temp folder and
@@ -140,6 +161,9 @@ func (s *Server) dir(w http.ResponseWriter, r *http.Request) {
 	dst, err := safePath(s.Cfg.SaveDir, r.URL.Query().Get("name"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !s.accept(w, r, "folder "+filepath.Base(dst)) {
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -162,6 +186,36 @@ func (s *Server) dir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("received folder %s from %s (%d files, %d bytes)", dst, r.Header.Get("X-From"), files, n)
+	s.received(r, dst)
+}
+
+func (s *Server) accept(w http.ResponseWriter, r *http.Request, what string) bool {
+	if s.Accept == nil || s.Accept(r.Header.Get("X-From"), what) {
+		return true
+	}
+	http.Error(w, "declined by the receiver", http.StatusForbidden)
+	return false
+}
+
+func (s *Server) received(r *http.Request, path string) {
+	if s.OnReceive != nil {
+		s.OnReceive(r.Header.Get("X-From"), path)
+	}
+}
+
+// FormatSize turns a byte count into "512 B", "34 KB", "2.1 MB", "1.4 GB" ("unknown size" if negative).
+func FormatSize(n int64) string {
+	switch {
+	case n < 0:
+		return "unknown size"
+	case n < 1000:
+		return fmt.Sprintf("%d B", n)
+	case n < 1e6:
+		return fmt.Sprintf("%d KB", n/1000)
+	case n < 1e9:
+		return fmt.Sprintf("%.1f MB", float64(n)/1e6)
+	}
+	return fmt.Sprintf("%.1f GB", float64(n)/1e9)
 }
 
 // untar extracts regular files and folders into root. Anything else (symlinks,

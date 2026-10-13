@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>airdrop</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --accent: #0a84ff; --on-accent: #fff; --bad: #ff3b30; --ok: #34c759;
+    --bg: #f2f2f7; --card: #fff; --text: #111; --muted: #6e6e73; --line: #d1d1d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1c1e; --card: #2c2c2e; --text: #f5f5f7; --muted: #98989d; --line: #3a3a3c; --bad: #ff453a; --ok: #30d158; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px -apple-system, system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); user-select: none; -webkit-user-select: none; }
+  main { padding: 16px; }
+  button { font: inherit; cursor: pointer; border: 0; border-radius: 8px; padding: 6px 10px; background: var(--bg); color: var(--accent); font-weight: 600; }
+  button.primary { background: var(--accent); color: var(--on-accent); }
+  input { font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--bg); color: var(--text); width: 7.5em; letter-spacing: 2px; }
+
+  header small { color: var(--accent); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  header h1 { margin: 2px 0 4px; font-size: 22px; letter-spacing: -.3px; overflow-wrap: anywhere; }
+  .sub { color: var(--muted); font-size: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .sub.bad { color: var(--bad); }
+  .code { background: var(--card); border-radius: 6px; padding: 2px 8px; color: var(--text); font: 600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 1px; }
+
+  .seg { display: flex; margin-top: 12px; background: var(--line); border-radius: 9px; padding: 2px; }
+  .seg button { flex: 1; background: none; color: var(--text); font-weight: 500; border-radius: 7px; padding: 6px 4px; font-size: 13px; }
+  .seg button[aria-pressed=true] { background: var(--card); color: var(--accent); font-weight: 600; box-shadow: 0 1px 3px #0002; }
+  .seg.off button[aria-pressed=true] { color: var(--muted); }
+
+  h2 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 18px 4px 6px; font-weight: 600; }
+  .card { background: var(--card); border-radius: 12px; overflow: hidden; }
+  .peer { padding: 10px 12px; border-bottom: 1px solid var(--line); transition: background .15s; }
+  .peer:last-child { border-bottom: 0; }
+  .peer.file-drop-target-active { background: color-mix(in srgb, var(--accent) 15%, var(--card)); outline: 2px dashed var(--accent); outline-offset: -4px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+  .dot.on { background: var(--ok); }
+  .pname { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .os { color: var(--muted); font-size: 12px; }
+  .actions { display: flex; gap: 6px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+  .hint { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .status { font-size: 12px; margin-top: 6px; color: var(--muted); overflow-wrap: anywhere; }
+  .status.bad { color: var(--bad); }
+  .empty { padding: 16px; text-align: center; color: var(--muted); }
+
+  .recv { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); align-items: baseline; }
+  .recv:last-child { border-bottom: 0; }
+  .recv .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recv .f { color: var(--muted); font-size: 12px; flex: none; }
+  .recv.link { cursor: pointer; }
+  .recv.link .n { color: var(--accent); }
+
+  details { background: var(--card); border-radius: 12px; padding: 10px 12px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details p { color: var(--muted); font-size: 12px; margin: 8px 0; }
+  .qr { display: block; width: 180px; height: 180px; margin: 8px auto 4px; border-radius: 8px; background: #fff; padding: 6px; image-rendering: pixelated; }
+
+  .setting { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .setting:last-child { border-bottom: 0; }
+  .switch { position: relative; width: 42px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch span { position: absolute; inset: 0; border-radius: 12px; background: var(--line); transition: background .2s; cursor: pointer; }
+  .switch span::after { content: ""; position: absolute; width: 20px; height: 20px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0003; transition: transform .2s; }
+  .switch input:checked + span { background: var(--ok); }
+  .switch input:checked + span::after { transform: translateX(18px); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <small>This device</small>
+    <h1 id="me">…</h1>
+    <div id="sub" class="sub"></div>
+    <div id="mode" class="seg" role="group" aria-label="Receiving">
+      <button data-mode="on">Receive</button>
+      <button data-mode="10m">For 10 min</button>
+      <button data-mode="off">Off</button>
+    </div>
+  </header>
+
+  <h2>Send to</h2>
+  <div id="peers" class="card"><div class="empty">Looking for devices…</div></div>
+
+  <h2>Received</h2>
+  <div id="recv" class="card"><div class="empty">Nothing yet</div></div>
+
+  <h2>iPhone</h2>
+  <details>
+    <summary>Send from your iPhone</summary>
+    <p>Receiving must be on. With Tailscale on, scan this with the iPhone camera, then use Share → Add to Home Screen. Anyone with this code can send you files, so don't share it.</p>
+    <img id="qr" class="qr" alt="QR code for the iPhone upload page">
+  </details>
+
+  <h2>Settings</h2>
+  <div class="card">
+    <label class="setting">Ask before receiving files<span class="switch"><input id="ask" type="checkbox"><span></span></span></label>
+    <div class="setting">Received files<button id="opendir">Open folder</button></div>
+  </div>
+</main>
+
+<script type="module">
+import { Call, Events } from '/wails/runtime.js';
+const call = (m, ...args) => Call.ByName('main.App.' + m, ...args);
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+// ---- this device
+async function loadInfo() {
+  const info = await call('Info');
+  $('me').textContent = info.Name;
+  const sub = $('sub');
+  sub.replaceChildren();
+  if (info.ServerError) { sub.className = 'sub bad'; sub.textContent = info.ServerError; return; }
+  if (info.QR) $('qr').src = info.QR;
+  $('ask').checked = !info.AutoAccept;
+  pairCode = info.PairCode;
+  showMode(info.Mode, info.Until);
+}
+
+// ---- receiving on / off (the tray menu has the same switch; "state" keeps both in sync)
+let pairCode = '';
+function showMode(mode, until) {
+  const sub = $('sub');
+  sub.className = 'sub';
+  sub.replaceChildren();
+  if (mode === 'off') sub.append(el('span', null, 'Not receiving. Others can\u2019t send to you.'));
+  else sub.append(el('span', null, mode === 'until' ? `Receiving until ${until} · pair code` : 'Receiving · pair code'), el('span', 'code', pairCode));
+  $('mode').classList.toggle('off', mode === 'off');
+  const pressed = mode === 'until' ? '10m' : mode;
+  document.querySelectorAll('#mode button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === pressed));
+}
+document.querySelectorAll('#mode button').forEach(b => b.onclick = () => call('SetReceiving', b.dataset.mode));
+Events.On('state', ev => { if (!$('sub').classList.contains('bad')) showMode(ev.data.mode, ev.data.until); });
+$('ask').onchange = e => call('SetAutoAccept', !e.target.checked);
+$('opendir').onclick = () => call('OpenSaveDir');
+
+// ---- peers
+const status = {};   // peer name -> {text, error}
+let lastPeers = '';
+
+function peerRow(p) {
+  const row = el('div', 'peer');
+  const top = el('div', 'row');
+  top.append(el('span', 'dot' + (p.Online ? ' on' : '')), el('span', 'pname', p.Name), el('span', 'os', p.OS));
+  row.append(top);
+  const actions = el('div', 'actions');
+  if (p.Paired) {
+    row.setAttribute('data-file-drop-target', '');
+    row.setAttribute('data-peer', p.Name);
+    const choose = el('button', 'primary', 'Choose files…');
+    choose.onclick = () => call('ChooseAndSend', p.Name).catch(() => {});
+    const clip = el('button', null, 'Send clipboard');
+    clip.onclick = () => call('SendClipboard', p.Name).catch(() => {});
+    actions.append(choose, clip, el('span', 'hint', 'or drop files here'));
+  } else {
+    const pair = el('button', null, 'Pair…');
+    pair.onclick = () => {
+      actions.replaceChildren();
+      const code = el('input'); code.placeholder = '6-digit code'; code.inputMode = 'numeric'; code.maxLength = 6;
+      const go = el('button', 'primary', 'Pair');
+      const submit = async () => {
+        try { await call('Pair', p.Name, code.value.trim()); status[p.Name] = { text: '✓ Paired' }; lastPeers = ''; refreshPeers(); }
+        catch (err) { status[p.Name] = { text: String(err.message || err), error: true }; renderStatus(row, p.Name); }
+      };
+      go.onclick = submit;
+      code.onkeydown = e => e.key === 'Enter' && submit();
+      actions.append(code, go, el('span', 'hint', 'shown by its receiver'));
+      code.focus();
+    };
+    actions.append(pair);
+  }
+  row.append(actions);
+  renderStatus(row, p.Name);
+  return row;
+}
+
+function renderStatus(row, name) {
+  row.querySelector('.status')?.remove();
+  const s = status[name];
+  if (s) row.append(el('div', 'status' + (s.error ? ' bad' : ''), s.text));
+}
+
+async function refreshPeers() {
+  let peers;
+  try { peers = await call('Peers'); }
+  catch (err) { $('peers').replaceChildren(el('div', 'empty', 'Tailscale isn’t running')); lastPeers = ''; return; }
+  const key = JSON.stringify(peers);
+  if (key === lastPeers || document.activeElement?.tagName === 'INPUT') return; // don't wipe a half-typed pair code
+  lastPeers = key;
+  const box = $('peers');
+  box.replaceChildren(...(peers.length ? peers.map(peerRow) : [el('div', 'empty', 'No other devices in your tailnet')]));
+}
+
+Events.On('status', ev => {
+  const d = ev.data;
+  status[d.peer] = { text: d.text, error: d.error };
+  const row = document.querySelector(`.peer[data-peer="${CSS.escape(d.peer)}"]`);
+  if (row) renderStatus(row, d.peer);
+});
+
+// ---- received
+Events.On('received', ev => {
+  const d = ev.data, box = $('recv');
+  box.querySelector('.empty')?.remove();
+  const r = el('div', 'recv' + (d.path ? ' link' : ''));
+  r.append(el('span', 'n', d.name), el('span', 'f', d.from));
+  if (d.path) { r.title = 'Open ' + d.path; r.onclick = () => call('Open', d.path); }
+  box.prepend(r);
+  while (box.children.length > 8) box.lastChild.remove();
+});
+
+loadInfo();
+refreshPeers();
+setInterval(refreshPeers, 5000);
+</script>
+</body>
+</html>

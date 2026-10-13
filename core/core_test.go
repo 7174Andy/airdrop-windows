@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSafePath(t *testing.T) {
@@ -185,5 +186,105 @@ func TestUploadPage(t *testing.T) {
 	}
 	if !strings.HasSuffix(UploadURL("100.1.2.3:7878", a.Token), "100.1.2.3:7878/?t="+a.Token) {
 		t.Fatal(UploadURL("100.1.2.3:7878", a.Token))
+	}
+}
+
+// The GUI can ask the user before a transfer starts, and hears about every finished one.
+func TestAcceptAndOnReceive(t *testing.T) {
+	a, b := newCfg(t, "A"), newCfg(t, "B")
+	srv := NewServer(a)
+	var asked []string
+	var got []string
+	allow := false
+	srv.Accept = func(from, what string) bool { asked = append(asked, from+": "+what); return allow }
+	srv.OnReceive = func(from, path string) { got = append(got, filepath.Base(path)) }
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	Pair(ts.URL, srv.PairCode(), b)
+	tok, _ := b.PeerToken("A")
+
+	src := filepath.Join(t.TempDir(), "x.txt")
+	os.WriteFile(src, []byte("data"), 0o644)
+	dir := filepath.Join(t.TempDir(), "pics")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "p.jpg"), []byte("jpg"), 0o644)
+
+	if err := SendFile(ts.URL, tok, "B", src); err == nil || !strings.Contains(err.Error(), "declined") {
+		t.Fatalf("declined file: %v", err)
+	}
+	if err := SendFile(ts.URL, tok, "B", dir); err == nil {
+		t.Fatal("declined folder was accepted")
+	}
+	if left, _ := os.ReadDir(a.SaveDir); len(left) != 0 {
+		t.Fatalf("declined transfers left files: %v", left)
+	}
+
+	allow = true
+	if err := SendFile(ts.URL, tok, "B", src); err != nil {
+		t.Fatal(err)
+	}
+	if err := SendFile(ts.URL, tok, "B", dir); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"B: x.txt (4 B)", "B: folder pics", "B: x.txt (4 B)", "B: folder pics"}
+	if strings.Join(asked, "|") != strings.Join(want, "|") {
+		t.Fatalf("asked %q, want %q", asked, want)
+	}
+	if strings.Join(got, "|") != "x.txt|pics" {
+		t.Fatalf("OnReceive got %q", got)
+	}
+}
+
+// Receiving can be switched off, or on until a deadline; senders get a clear refusal.
+func TestReceivingToggle(t *testing.T) {
+	a, b := newCfg(t, "A"), newCfg(t, "B")
+	srv := NewServer(a)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	Pair(ts.URL, srv.PairCode(), b)
+	tok, _ := b.PeerToken("A")
+	src := filepath.Join(t.TempDir(), "x.txt")
+	os.WriteFile(src, []byte("x"), 0o644)
+
+	ping := func() string {
+		resp, err := http.Get(ts.URL + "/ping")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return string(body)
+	}
+	if !a.Receiving() || !strings.Contains(ping(), `"receiving":true`) {
+		t.Fatalf("receiving should default to on: %s", ping())
+	}
+
+	a.SetReceiving(false, time.Time{})
+	if err := SendFile(ts.URL, tok, "B", src); err == nil || !strings.Contains(err.Error(), "not receiving") {
+		t.Fatalf("send while off: %v", err)
+	}
+	if err := SendText(ts.URL, tok, "B", "hi"); err == nil {
+		t.Fatal("text accepted while off")
+	}
+	if _, err := Pair(ts.URL, srv.PairCode(), newCfg(t, "C")); err == nil {
+		t.Fatal("pairing accepted while off")
+	}
+	if !strings.Contains(ping(), `"receiving":false`) {
+		t.Fatal(ping())
+	}
+
+	a.SetReceiving(true, time.Now().Add(time.Hour)) // "on for a while"
+	if err := SendFile(ts.URL, tok, "B", src); err != nil {
+		t.Fatal(err)
+	}
+	a.SetReceiving(true, time.Now().Add(-time.Second)) // the while is over
+	if a.Receiving() {
+		t.Fatal("still receiving after the deadline")
+	}
+
+	// The setting survives a restart.
+	again, _ := LoadConfig(a.path)
+	if again.Receiving() {
+		t.Fatal("expired deadline not persisted")
 	}
 }

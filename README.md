@@ -38,10 +38,9 @@ Received files go to `~/Downloads`. To change that, edit `save_dir` in the confi
 - [x] **Phase 1:** core and CLI. Pairing, sending files and text, peer discovery.
 - [x] **Phase 2:** folder send with a streamed tar, plus tests that unsafe paths are refused.
 - [x] **Phase 3:** sending from an iPhone. An upload page, opened by scanning a QR code.
-- [ ] **Phase 4:** desktop app (Wails).
-  - Tray icon, drag and drop, notifications, and an Accept/Decline prompt.
-  - Starts at login.
-  - Windows "Send to" and macOS Finder Quick Action.
+- [ ] **Phase 4:** desktop app (Wails v3).
+  - [x] 4a: a background tray receiver with Receive / Receive for 10 minutes / Off, plus an optional window (drag-drop onto a device, clipboard send, pairing, iPhone QR code), notifications, and an Accept/Decline prompt.
+  - [ ] 4b: start at login, a proper macOS app bundle and icon, Windows "Send to" and a macOS Finder Quick Action.
 - [ ] **Phase 5:** life without Tailscale.
   - Direct LAN connection with mDNS and pinned TLS.
   - A self-hosted relay for networks that block device-to-device traffic.
@@ -64,6 +63,10 @@ GOOS=windows GOARCH=amd64 go build -o airdrop.exe ./cmd/airdrop   # Windows buil
 go test ./core/                                                   # run all tests
 go test ./core/ -run TestSendDir                                  # run one test
 go vet ./...
+
+go build -o airdrop-app ./app                                         # desktop app (macOS needs Xcode command-line tools: cgo)
+GOOS=windows GOARCH=amd64 go build -ldflags=-H=windowsgui -o airdrop-app.exe ./app
+./airdrop-app --background                                            # start in the tray without opening the window
 ```
 
 **Layout**
@@ -76,5 +79,6 @@ go vet ./...
 | `core/send.go` | The sender, and the client side of pairing. |
 | `core/config.go` | Device name, token, paired peers, save folder. |
 | `cmd/airdrop` | The CLI. |
+| `app/` | The desktop app: tray + receiver (`main.go`), window bindings and receiver hooks (`app.go`), window UI (`frontend/index.html`). |
 
 **Testing between two machines:** run `airdrop serve` on one device, then `airdrop pair` and `airdrop send` from the other. To confirm a file arrived intact, compare hashes: `shasum -a 256 <file>` on macOS and `Get-FileHash <file>` on Windows. When Windows asks, allow `airdrop.exe` through the firewall.

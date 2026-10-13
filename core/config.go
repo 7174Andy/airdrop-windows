@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 const DefaultPort = 7878
@@ -20,6 +21,12 @@ type Config struct {
 	SaveDir string            `json:"save_dir"` // where received files land
 	Port    int               `json:"port"`
 	Peers   map[string]string `json:"peers"` // peer name -> that peer's token
+	// AutoAccept skips the desktop app's Accept/Decline prompt. The CLI always accepts.
+	AutoAccept bool `json:"auto_accept"`
+	// Receiving: off, or on until a deadline (zero = no deadline). Checked on every request,
+	// so no timer is needed for it to switch off.
+	Off   bool      `json:"off,omitempty"`
+	Until time.Time `json:"until,omitempty"`
 
 	path string
 	mu   sync.Mutex
@@ -81,6 +88,30 @@ func (c *Config) AddPeer(name, token string) error {
 		}
 	}
 	c.Peers[name] = token
+	return c.save()
+}
+
+func (c *Config) SetAutoAccept(on bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.AutoAccept = on
+	return c.save()
+}
+
+func (c *Config) Receiving() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.Off && (c.Until.IsZero() || time.Now().Before(c.Until))
+}
+
+// SetReceiving switches receiving on (until the deadline, if non-zero) or off.
+func (c *Config) SetReceiving(on bool, until time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Off, c.Until = !on, until
+	if !on {
+		c.Until = time.Time{}
+	}
 	return c.save()
 }
 

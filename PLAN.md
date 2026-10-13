@@ -33,7 +33,8 @@ airdrop/
 - `POST /file?name=<rel/path>&size=N`: body is the raw file stream, written to `<saveDir>/<name>.part`, renamed when done. `rel/path` is sanitized (no `..`, no absolute paths; this is a trust boundary).
 - **Folder send**: the client walks the dir and streams a **tar** (`archive/tar`, stdlib) to `POST /dir?name=X`; the receiver extracts it with the same path checks. No zip step, no temp files.
 - `POST /text`: body is UTF-8 text → put on the receiver's clipboard (`golang.design/x/clipboard`, or Wails' clipboard runtime in the GUI) and shown as a notification.
-- Accept prompt: if a peer isn't on auto-accept, the GUI shows an Accept/Decline dialog before reading the body. The CLI receiver accepts from paired peers.
+- Accept prompt: the desktop app asks Accept/Decline before reading the body, but only while its window is open and "Ask before receiving" is on. With the window closed, paired peers are trusted and you get a notification. The CLI receiver accepts from paired peers.
+- Receiving on/off: off, on, or on until a deadline ("receive for 10 minutes"). Stored in config and checked on every request, so no timer is needed. While off, everything but `/ping` and the upload page gets 503 "<name> is not receiving right now".
 - Resume, compression, and parallel streams are skipped. Over WireGuard a single HTTP stream gets close to full link speed.
 
 ### iPhone → Windows
@@ -50,17 +51,20 @@ airdrop send <peer> <file|dir>... # send files and folders
 airdrop text <peer> "hello"       # or: pbpaste | airdrop text <peer>
 ```
 
-### Desktop app (Wails)
-- Tray icon, with a small window holding the peer list and a drag-drop zone (drop onto a peer → send).
-- Notifications on receive, "Open folder" button, Accept/Decline dialog.
-- Starts at login: macOS LaunchAgent / Windows Startup shortcut (added in phase 4).
-- OS integration (phase 4): Windows "Send to" shortcut → `airdrop send`, macOS Finder Quick Action → `airdrop send`.
+### Desktop app (Wails v3)
+Revised during phase 4: receiving must not depend on an app being open.
+- **One background process.** The app is a tray icon that owns the receiver and keeps running. It has no window by default (`--background`) and uses about 76 MB idle on macOS (the bare CLI receiver uses about 20 MB). The window is created when opened and destroyed when closed. Receiving carries on.
+- **Tray menu:** status line, Receive / Receive for 10 minutes / Don't receive, Open airdrop…, Open received files, Quit.
+- **Window (optional):** the same receiving switch, peer list with drag-drop onto a peer, Choose files…, Send clipboard, pairing, a received list, the iPhone QR code, and "Ask before receiving".
+- **Single instance:** launching the app again opens the running app's window.
+- **Notifications:** the Wails notifications service on Windows. On macOS it needs a bundled `.app`, so until packaging the app falls back to `osascript`.
+- **Phase 4b:** start at login (LaunchAgent / Windows Startup, running `--background`), a macOS `.app` bundle and app icon, Windows "Send to" and macOS Finder Quick Action (→ `airdrop send`).
 
 ## Build phases
 1. **Core + CLI**: config, pairing, server `/file` `/text` `/ping`, send, discover. Check Mac↔Windows over the tailnet.
 2. **Folder send** (tar stream) + path sanitization tests.
 3. **iPhone upload page** + QR code.
-4. **Wails GUI**: tray, drag-drop, notifications, accept dialog, autostart, Send-to / Quick Action.
+4. **Desktop app**: (4a) background tray receiver with on/off/10-minute switch, optional window with drag-drop, notifications, accept dialog. (4b) start at login, .app bundle + icon, Send-to / Quick Action.
 5. **Later (removing Tailscale)**: see the section below.
 
 ## Life after Tailscale (phase 5+, nothing built for it now)
