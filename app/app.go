@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -166,7 +167,11 @@ func (a *App) refreshState() {
 		a.trayOn.SetChecked(mode == "on")
 		a.trayTen.SetChecked(mode == "until")
 		a.trayOff.SetChecked(mode == "off")
-		a.trayMenu.Update()
+		// On Windows the setters above already patch the tray's live menu, and Update would
+		// rebuild into a detached menu that steals the items, freezing the tray from then on.
+		if runtime.GOOS != "windows" {
+			a.trayMenu.Update()
+		}
 	}
 	a.app.Event.Emit("state", map[string]string{"mode": mode, "until": until})
 }
