@@ -380,11 +380,18 @@ func (a *App) accept(from, what string) bool {
 
 func (a *App) ask(from, what string) bool {
 	answer := make(chan bool, 1)
+	yesLabel, noLabel := "Accept", "Decline"
+	if runtime.GOOS == "windows" {
+		// Wails draws a plain Yes/No MessageBox there and finds the callback by the
+		// clicked button's label, so any other labels mean no click ever registers.
+		yesLabel, noLabel = "Yes", "No"
+		what += "\n\nAccept it?"
+	}
 	d := a.app.Dialog.Question().
 		SetTitle(from + " wants to send you").
 		SetMessage(what)
-	yes := d.AddButton("Accept").OnClick(func() { answer <- true })
-	no := d.AddButton("Decline").OnClick(func() { answer <- false })
+	yes := d.AddButton(yesLabel).OnClick(func() { answer <- true })
+	no := d.AddButton(noLabel).OnClick(func() { answer <- false })
 	d.SetDefaultButton(yes)
 	d.SetCancelButton(no)
 	d.Show()
