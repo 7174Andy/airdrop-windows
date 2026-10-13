@@ -3,6 +3,7 @@ package core
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,8 +18,8 @@ import (
 // Addr is the base URL of a peer's receiver.
 func Addr(host string, port int) string { return fmt.Sprintf("http://%s:%d", host, port) }
 
-func post(u, token, from string, body io.Reader, size int64) (*http.Response, error) {
-	req, err := http.NewRequest("POST", u, body)
+func post(ctx context.Context, u, token, from string, body io.Reader, size int64) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", u, body)
 	if err != nil {
 		return nil, err
 	}
@@ -39,8 +40,31 @@ func post(u, token, from string, body io.Reader, size int64) (*http.Response, er
 	return resp, nil
 }
 
-// SendFile sends a file, or a whole folder via SendDir.
+// Progress is told how many bytes of file content have been sent so far, out of
+// total. It runs on the sending goroutine, once per read, so throttle anything slow.
+type Progress func(sent, total int64)
+
+// counter is an io.Writer for io.TeeReader: it sees every byte read from a file.
+type counter struct {
+	sent, total int64
+	fn          Progress
+}
+
+func (c *counter) Write(p []byte) (int, error) {
+	c.sent += int64(len(p))
+	if c.fn != nil {
+		c.fn(c.sent, c.total)
+	}
+	return len(p), nil
+}
+
+// SendFile sends a file, or a whole folder as a streamed tar.
 func SendFile(addr, token, from, path string) error {
+	return Send(context.Background(), addr, token, from, path, nil)
+}
+
+// Send is SendFile with progress (nil for none); cancelling ctx aborts the transfer.
+func Send(ctx context.Context, addr, token, from, path string, progress Progress) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -51,21 +75,31 @@ func SendFile(addr, token, from, path string) error {
 		return err
 	}
 	if st.IsDir() {
-		return SendDir(addr, token, from, path)
+		return sendDir(ctx, addr, token, from, path, progress)
 	}
-	resp, err := post(addr+"/file?name="+url.QueryEscape(filepath.Base(path)), token, from, f, st.Size())
+	c := &counter{total: st.Size(), fn: progress}
+	resp, err := post(ctx, addr+"/file?name="+url.QueryEscape(filepath.Base(path)), token, from, io.TeeReader(f, c), st.Size())
 	if err != nil {
 		return err
 	}
 	return resp.Body.Close()
 }
 
-// SendDir streams the folder as a tar (no temp file). Symlinks and other
+// sendDir streams the folder as a tar (no temp file). Symlinks and other
 // non-regular files are skipped; the receiver would reject them.
-func SendDir(addr, token, from, dir string) error {
+func sendDir(ctx context.Context, addr, token, from, dir string, progress Progress) error {
+	c := &counter{fn: progress}
+	filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error { // total, for progress
+		if err == nil && d.Type().IsRegular() {
+			if info, err := d.Info(); err == nil {
+				c.total += info.Size()
+			}
+		}
+		return nil
+	})
 	pr, pw := io.Pipe()
-	go func() { pw.CloseWithError(writeTar(pw, dir)) }()
-	resp, err := post(addr+"/dir?name="+url.QueryEscape(filepath.Base(dir)), token, from, pr, -1)
+	go func() { pw.CloseWithError(writeTar(pw, dir, c)) }()
+	resp, err := post(ctx, addr+"/dir?name="+url.QueryEscape(filepath.Base(dir)), token, from, pr, -1)
 	pr.Close() // unblocks writeTar if the receiver bailed early
 	if err != nil {
 		return err
@@ -73,7 +107,7 @@ func SendDir(addr, token, from, dir string) error {
 	return resp.Body.Close()
 }
 
-func writeTar(w io.Writer, dir string) error {
+func writeTar(w io.Writer, dir string, c *counter) error {
 	tw := tar.NewWriter(w)
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || p == dir {
@@ -100,7 +134,7 @@ func writeTar(w io.Writer, dir string) error {
 			return err
 		}
 		defer f.Close()
-		_, err = io.Copy(tw, f)
+		_, err = io.Copy(tw, io.TeeReader(f, c))
 		return err
 	})
 	if err != nil {
@@ -110,7 +144,7 @@ func writeTar(w io.Writer, dir string) error {
 }
 
 func SendText(addr, token, from, text string) error {
-	resp, err := post(addr+"/text", token, from, strings.NewReader(text), int64(len(text)))
+	resp, err := post(context.Background(), addr+"/text", token, from, strings.NewReader(text), int64(len(text)))
 	if err != nil {
 		return err
 	}
@@ -120,7 +154,7 @@ func SendText(addr, token, from, text string) error {
 // Pair swaps tokens with the receiver at addr using the code it shows, and saves its token in cfg.
 func Pair(addr, code string, cfg *Config) (peerName string, err error) {
 	b, _ := json.Marshal(pairMsg{Name: cfg.Name, Token: cfg.Token, Code: code})
-	resp, err := post(addr+"/pair", "", cfg.Name, bytes.NewReader(b), int64(len(b)))
+	resp, err := post(context.Background(), addr+"/pair", "", cfg.Name, bytes.NewReader(b), int64(len(b)))
 	if err != nil {
 		return "", err
 	}

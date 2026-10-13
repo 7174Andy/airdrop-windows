@@ -3,6 +3,8 @@ package core
 import (
 	"archive/tar"
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -148,13 +150,13 @@ func TestDirRejectsEvilTar(t *testing.T) {
 		}
 		tw.Close()
 
-		resp, err := post(ts.URL+"/dir?name=evil", a.Token, "mallory", &buf, int64(buf.Len()))
+		resp, err := post(context.Background(), ts.URL+"/dir?name=evil", a.Token, "mallory", &buf, int64(buf.Len()))
 		if err == nil {
 			resp.Body.Close()
 			t.Errorf("%q accepted", evil.Name)
 		}
 	}
-	if _, err := post(ts.URL+"/dir?name=../up", a.Token, "mallory", strings.NewReader(""), 0); err == nil {
+	if _, err := post(context.Background(), ts.URL+"/dir?name=../up", a.Token, "mallory", strings.NewReader(""), 0); err == nil {
 		t.Error("unsafe folder name accepted")
 	}
 	// Nothing escaped, and no half-written folders remain.
@@ -286,5 +288,34 @@ func TestReceivingToggle(t *testing.T) {
 	again, _ := LoadConfig(a.path)
 	if again.Receiving() {
 		t.Fatal("expired deadline not persisted")
+	}
+}
+
+func TestSendProgressAndCancel(t *testing.T) {
+	a, b := newCfg(t, "A"), newCfg(t, "B")
+	srv := NewServer(a)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	Pair(ts.URL, srv.PairCode(), b)
+	tok, _ := b.PeerToken("A")
+
+	dir := filepath.Join(t.TempDir(), "d")
+	os.MkdirAll(filepath.Join(dir, "sub"), 0o755)
+	os.WriteFile(filepath.Join(dir, "a.bin"), bytes.Repeat([]byte("a"), 100_000), 0o644)
+	os.WriteFile(filepath.Join(dir, "sub", "b.bin"), bytes.Repeat([]byte("b"), 50_000), 0o644)
+	for path, want := range map[string]int64{filepath.Join(dir, "a.bin"): 100_000, dir: 150_000} {
+		var sent, total int64
+		if err := Send(context.Background(), ts.URL, tok, "B", path, func(s, t int64) { sent, total = s, t }); err != nil {
+			t.Fatal(err)
+		}
+		if sent != want || total != want { // file bytes only, not tar headers
+			t.Fatalf("%s: progress ended at %d/%d, want %d", path, sent, total, want)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := Send(ctx, ts.URL, tok, "B", dir, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled send: %v", err)
 	}
 }

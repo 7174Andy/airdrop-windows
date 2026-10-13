@@ -19,7 +19,7 @@ airdrop/
   go.mod
   core/
     server.go     // HTTP receiver: POST /file, POST /text, GET / (iPhone upload page), GET /ping
-    send.go       // client: SendFile, SendDir, SendText
+    send.go       // client: SendFile, Send (progress + cancel), SendText
     discover.go   // peers from `tailscale status --json`  ← Tailscale seam
     config.go     // ~/.config/airdrop/config.json: device name, token, paired peers, save dir, auto-accept
     upload.html   // embedded (go:embed) mobile upload page

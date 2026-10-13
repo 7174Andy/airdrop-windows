@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -45,14 +46,18 @@ type App struct {
 	mu       sync.Mutex
 	accepted map[string]time.Time // sender -> last time the user accepted them
 	pending  []string             // files from the right-click menu, waiting for you to pick a device
+
+	transfers []*Transfer // what the Transfers list shows, oldest first
+	nextID    int
+	cancels   map[int]context.CancelFunc // transfer ID -> cancel, while waiting or sending
 }
 
 type Info struct {
 	Name, Addr, PairCode, QR, SaveDir, ServerError string
 	AutoAccept, StartAtLogin, ContextMenu          bool
 	Pending                                        []string // files waiting to be sent
-	Mode                                           string // "on", "until", "off"
-	Until                                          string // "22:40" when Mode is "until"
+	Mode                                           string   // "on", "until", "off"
+	Until                                          string   // "22:40" when Mode is "until"
 }
 
 type PeerView struct {
@@ -97,7 +102,11 @@ func (a *App) listen() net.Listener {
 	return ln
 }
 
-func (a *App) server() (addr, errMsg string) { a.mu.Lock(); defer a.mu.Unlock(); return a.addr, a.serverErr }
+func (a *App) server() (addr, errMsg string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.addr, a.serverErr
+}
 
 // ---- window
 
@@ -106,8 +115,10 @@ func (a *App) ShowWindow() {
 	if a.win == nil {
 		w := a.app.Window.NewWithOptions(application.WebviewWindowOptions{
 			Title:          "airdrop",
-			Width:          380,
-			Height:         660,
+			Width:          900,
+			Height:         600,
+			MinWidth:       720,
+			MinHeight:      480,
 			EnableFileDrop: true,
 		})
 		w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { a.setWin(nil) }) // destroyed; receiving carries on
@@ -234,24 +245,6 @@ func (a *App) target(name string) (addr, token string, err error) {
 	return core.Addr(p.IP, a.cfg.Port), token, nil
 }
 
-// Send sends files and folders to a peer, reporting progress as "status" events.
-func (a *App) Send(name string, paths []string) error {
-	addr, token, err := a.target(name)
-	if err != nil {
-		a.status(name, err.Error(), true)
-		return err
-	}
-	for i, p := range paths {
-		a.status(name, fmt.Sprintf("Sending %d of %d · %s", i+1, len(paths), filepath.Base(p)), false)
-		if err := core.SendFile(addr, token, a.cfg.Name, p); err != nil {
-			a.status(name, filepath.Base(p)+": "+err.Error(), true)
-			return err
-		}
-	}
-	a.status(name, fmt.Sprintf("✓ Sent %d item%s", len(paths), plural(len(paths))), false)
-	return nil
-}
-
 // ChooseAndSend opens a file picker and sends what was picked.
 func (a *App) ChooseAndSend(name string) error {
 	paths, err := a.app.Dialog.OpenFile().
@@ -279,7 +272,7 @@ func (a *App) SendClipboard(name string) error {
 		a.status(name, err.Error(), true)
 		return err
 	}
-	a.status(name, "✓ Clipboard sent", false)
+	a.addTransfer(Transfer{Up: true, Peer: name, Name: "Clipboard text", State: "done", Sent: int64(len(text)), Total: int64(len(text))})
 	return nil
 }
 
@@ -404,23 +397,23 @@ func (a *App) ask(from, what string) bool {
 }
 
 func (a *App) onReceive(from, path string) {
-	a.app.Event.Emit("received", map[string]string{"from": from, "path": path, "name": filepath.Base(path)})
+	t := Transfer{Peer: from, Name: filepath.Base(path), Path: path, State: "done"}
+	if st, err := os.Stat(path); err == nil {
+		t.Folder = st.IsDir()
+		if !t.Folder {
+			t.Sent, t.Total = st.Size(), st.Size()
+		}
+	}
+	a.addTransfer(t)
 	a.notify("From "+from, filepath.Base(path))
 }
 
 func (a *App) onText(from, text string) {
 	a.app.Clipboard.SetText(text)
-	a.app.Event.Emit("received", map[string]string{"from": from, "name": "Text copied to clipboard"})
+	a.addTransfer(Transfer{Peer: from, Name: "Text copied to clipboard", State: "done", Sent: int64(len(text)), Total: int64(len(text))})
 	a.notify("Text from "+from, "Copied to your clipboard")
 }
 
 func (a *App) status(peer, text string, isErr bool) {
 	a.app.Event.Emit("status", map[string]any{"peer": peer, "text": text, "error": isErr})
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }

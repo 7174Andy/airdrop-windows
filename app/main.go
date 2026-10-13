@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"log"
@@ -42,7 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	a := &App{cfg: cfg, accepted: map[string]time.Time{}}
+	a := &App{cfg: cfg, accepted: map[string]time.Time{}, cancels: map[int]context.CancelFunc{}}
 	services := []application.Service{application.NewService(a)}
 	if bundledOrNotMac() {
 		a.notes = notifications.New()
@@ -58,7 +59,7 @@ func main() {
 		Mac:         application.MacOptions{ActivationPolicy: application.ActivationPolicyAccessory}, // tray only, no Dock icon
 		Windows:     application.WindowsOptions{DisableQuitOnLastWindowClosed: true},
 		SingleInstance: &application.SingleInstanceOptions{ // opening the app again shows the running one
-			UniqueID:               "dev.airdrop-windows.app",
+			UniqueID: "dev.airdrop-windows.app",
 			OnSecondInstanceLaunch: func(d application.SecondInstanceData) {
 				application.InvokeAsync(func() {
 					if a.queue(d.Args, d.WorkingDir) { // right-click → Send with airdrop

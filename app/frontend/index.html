@@ -7,104 +7,192 @@
 <style>
   :root {
     color-scheme: light dark;
-    --accent: #0a84ff; --on-accent: #fff; --bad: #ff3b30; --ok: #34c759;
-    --bg: #f2f2f7; --card: #fff; --text: #111; --muted: #6e6e73; --line: #d1d1d6;
+    --accent: #0a6cdf; --on-accent: #fff; --bad: #d70015; --ok: #34c759; --ok-text: #248a3d;
+    --bg: #fff; --side: #f2f2f7; --card: #fff; --text: #111; --muted: #636366; --line: #d1d1d6; --soft: #e5e5ea;
+    --drop: #f5f9ff; --drop-line: #b9cff0; --sel-text: #fff;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #1c1c1e; --card: #2c2c2e; --text: #f5f5f7; --muted: #98989d; --line: #3a3a3c; --bad: #ff453a; --ok: #30d158; }
+    :root {
+      --accent: #3d94ff; --bad: #ff453a; --ok: #30d158; --ok-text: #30d158;
+      --bg: #1e1e20; --side: #2a2a2d; --card: #2c2c2e; --text: #f5f5f7; --muted: #a1a1a6; --line: #3a3a3c; --soft: #38383b;
+      --drop: #1f2733; --drop-line: #34507a;
+    }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px -apple-system, system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); user-select: none; -webkit-user-select: none; }
-  main { padding: 16px; }
-  button { font: inherit; cursor: pointer; border: 0; border-radius: 8px; padding: 6px 10px; background: var(--bg); color: var(--accent); font-weight: 600; }
-  button.primary { background: var(--accent); color: var(--on-accent); }
-  input { font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--bg); color: var(--text); width: 7.5em; letter-spacing: 2px; }
-
-  header small { color: var(--accent); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
-  header h1 { margin: 2px 0 4px; font-size: 22px; letter-spacing: -.3px; overflow-wrap: anywhere; }
-  .sub { color: var(--muted); font-size: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .sub.bad { color: var(--bad); }
-  .code { background: var(--card); border-radius: 6px; padding: 2px 8px; color: var(--text); font: 600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 1px; }
-
-  .seg { display: flex; margin-top: 12px; background: var(--line); border-radius: 9px; padding: 2px; }
-  .seg button { flex: 1; background: none; color: var(--text); font-weight: 500; border-radius: 7px; padding: 6px 4px; font-size: 13px; }
-  .seg button[aria-pressed=true] { background: var(--card); color: var(--accent); font-weight: 600; box-shadow: 0 1px 3px #0002; }
-  .seg.off button[aria-pressed=true] { color: var(--muted); }
-
-  h2 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 18px 4px 6px; font-weight: 600; }
-  .card { background: var(--card); border-radius: 12px; overflow: hidden; }
-  .peer { padding: 10px 12px; border-bottom: 1px solid var(--line); transition: background .15s; }
-  .peer:last-child { border-bottom: 0; }
-  .peer.file-drop-target-active { background: color-mix(in srgb, var(--accent) 15%, var(--card)); outline: 2px dashed var(--accent); outline-offset: -4px; }
-  .row { display: flex; align-items: center; gap: 8px; }
+  html, body { height: 100%; }
+  body { margin: 0; display: flex; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); user-select: none; -webkit-user-select: none; overflow: hidden; }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); border-radius: 7px; padding: 5px 12px; background: var(--card); color: var(--text); font-weight: 600; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.link { border: 0; padding: 0; background: none; color: var(--accent); font-weight: 400; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input { font: inherit; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; background: var(--bg); color: var(--text); width: 9em; letter-spacing: 2px; }
+  h1, h2 { margin: 0; }
+  .muted { color: var(--muted); }
+  .code { font: 600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--card); border-radius: 5px; padding: 1px 6px; letter-spacing: 1px; color: var(--text); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
   .dot.on { background: var(--ok); }
-  .pname { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .os { color: var(--muted); font-size: 12px; }
-  .actions { display: flex; gap: 6px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
-  .hint { color: var(--muted); font-size: 12px; margin-left: auto; }
-  .status { font-size: 12px; margin-top: 6px; color: var(--muted); overflow-wrap: anywhere; }
-  .status.bad { color: var(--bad); }
-  .empty { padding: 16px; text-align: center; color: var(--muted); }
-  .pending { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 15%, var(--card)); }
+  [hidden] { display: none !important; }
+
+  /* ---- sidebar */
+  aside { width: 248px; flex: none; display: flex; flex-direction: column; gap: 18px; padding: 18px 12px 12px; background: var(--side); border-right: 1px solid var(--line); overflow-y: auto; }
+  .me { display: flex; flex-direction: column; gap: 6px; padding: 0 6px; }
+  .me small, .label { font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; }
+  .me small { color: var(--accent); }
+  .me h1 { font-size: 16px; overflow-wrap: anywhere; }
+  .sub { color: var(--muted); font-size: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .sub.bad { color: var(--bad); }
+  .seg { display: flex; margin-top: 6px; padding: 2px; border-radius: 8px; background: var(--soft); }
+  .seg button { flex: 1; border: 0; border-radius: 6px; padding: 5px 4px; font-size: 12px; font-weight: 500; background: none; }
+  .seg button[aria-pressed=true] { background: var(--card); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px #0002; }
+  .seg.off button[aria-pressed=true] { color: var(--muted); }
+  .label { color: var(--muted); padding: 0 6px 4px; }
+  nav { display: flex; flex-direction: column; gap: 2px; }
+  .item { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-radius: 7px; padding: 7px 8px; text-align: left; font-weight: 400; background: none; color: var(--text); }
+  .item:hover { background: var(--soft); }
+  .item.active { background: var(--accent); color: var(--sel-text); }
+  .item.active .dot.on { background: #9df0b3; }
+  .item .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item.active .n { font-weight: 600; }
+  .item .tag { font-size: 11px; color: var(--muted); }
+  .item.active .tag { color: var(--sel-text); }
+  .item.file-drop-target-active { outline: 2px dashed var(--accent); outline-offset: -2px; }
+  .item svg { flex: none; }
+  .grow { flex: 1; }
+  .foot { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--line); padding-top: 8px; }
+  .empty { padding: 8px; color: var(--muted); }
+
+  /* ---- main */
+  main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 18px; padding: 22px 26px; overflow: hidden; }
+  .view { display: flex; flex-direction: column; gap: 14px; flex: none; }
+  .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .head .title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .head h1 { font-size: 20px; overflow-wrap: anywhere; }
+  .meta { font-size: 12px; }
+  .pending { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
   .pending span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .drop { height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 2px dashed var(--drop-line); border-radius: 12px; background: var(--drop); text-align: center; padding: 12px; transition: background .15s, border-color .15s; }
+  .drop strong { font-size: 14px; overflow-wrap: anywhere; }
+  .drop.file-drop-target-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--bg)); }
+  .pair { display: flex; flex-direction: column; gap: 8px; padding: 18px; border: 1px solid var(--soft); border-radius: 12px; }
+  .pair p { margin: 0; }
+  .pair .row { display: flex; gap: 8px; }
+  .status { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .status.bad { color: var(--bad); }
+  .view > p { margin: 0; color: var(--muted); max-width: 60ch; line-height: 1.45; }
+  .qr { width: 200px; height: 200px; border-radius: 10px; background: #fff; padding: 8px; image-rendering: pixelated; }
 
-  .recv { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); align-items: baseline; }
-  .recv:last-child { border-bottom: 0; }
-  .recv .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .recv .f { color: var(--muted); font-size: 12px; flex: none; }
-  .recv.link { cursor: pointer; }
-  .recv.link .n { color: var(--accent); }
-
-  details { background: var(--card); border-radius: 12px; padding: 10px 12px; }
-  summary { cursor: pointer; font-weight: 600; }
-  details p { color: var(--muted); font-size: 12px; margin: 8px 0; }
-  .qr { display: block; width: 180px; height: 180px; margin: 8px auto 4px; border-radius: 8px; background: #fff; padding: 6px; image-rendering: pixelated; }
-
-  .setting { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .card { border: 1px solid var(--soft); border-radius: 10px; }
+  .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; border-bottom: 1px solid var(--soft); }
   .setting:last-child { border-bottom: 0; }
-  .switch { position: relative; width: 42px; height: 24px; flex: none; }
+  .setting .what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .setting .what span { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .switch { position: relative; width: 38px; height: 22px; flex: none; }
   .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-  .switch span { position: absolute; inset: 0; border-radius: 12px; background: var(--line); transition: background .2s; cursor: pointer; }
-  .switch span::after { content: ""; position: absolute; width: 20px; height: 20px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0003; transition: transform .2s; }
+  .switch span { position: absolute; inset: 0; border-radius: 11px; background: var(--line); transition: background .2s; cursor: pointer; }
+  .switch span::after { content: ""; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0003; transition: transform .2s; }
   .switch input:checked + span { background: var(--ok); }
-  .switch input:checked + span::after { transform: translateX(18px); }
+  .switch input:checked + span::after { transform: translateX(16px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- transfers */
+  .transfers { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  .th { display: flex; align-items: baseline; gap: 8px; }
+  .th h2 { font-size: 13px; }
+  .th .muted { flex: 1; font-size: 12px; }
+  .tlist { min-height: 0; overflow-y: auto; border: 1px solid var(--soft); border-radius: 10px; }
+  .t { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--soft); }
+  .t:last-child { border-bottom: 0; }
+  .t > svg { flex: none; }
+  .t .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .t .line { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .t .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .t .info { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t .detail { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .t .detail.bad { color: var(--bad); }
+  .bar { height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+  .bar div { height: 100%; border-radius: 3px; background: var(--accent); transition: width .2s linear; }
+  .x { width: 26px; height: 26px; border: 0; border-radius: 50%; padding: 0; background: var(--side); color: var(--muted); font-weight: 400; flex: none; }
+  .tlist .empty { padding: 14px; text-align: center; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
-<main>
-  <header>
+<aside>
+  <div class="me">
     <small>This device</small>
     <h1 id="me">…</h1>
     <div id="sub" class="sub"></div>
     <div id="mode" class="seg" role="group" aria-label="Receiving">
       <button data-mode="on">Receive</button>
-      <button data-mode="10m">For 10 min</button>
+      <button data-mode="10m">10 min</button>
       <button data-mode="off">Off</button>
     </div>
-  </header>
+  </div>
 
-  <h2>Send to</h2>
-  <div id="pending" class="pending" hidden><span></span><button id="unpend">Cancel</button></div>
-  <div id="peers" class="card"><div class="empty">Looking for devices…</div></div>
+  <nav aria-label="Devices">
+    <div class="label">Devices</div>
+    <div id="peers"><div class="empty">Looking for devices…</div></div>
+  </nav>
 
-  <h2>Received</h2>
-  <div id="recv" class="card"><div class="empty">Nothing yet</div></div>
+  <div class="grow"></div>
+  <div class="foot">
+    <button class="item" id="nav-iphone" data-view="iphone">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M20 20h-3"/></svg>
+      <span class="n">Send from iPhone…</span>
+    </button>
+    <button class="item" id="nav-settings" data-view="settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      <span class="n">Settings</span>
+    </button>
+  </div>
+</aside>
 
-  <h2>iPhone</h2>
-  <details>
-    <summary>Send from your iPhone</summary>
+<main>
+  <section id="v-device" class="view" aria-labelledby="d-name">
+    <div class="head">
+      <div class="title"><h1 id="d-name"></h1><div id="d-meta" class="meta muted"></div></div>
+      <button id="d-clip">Send clipboard</button>
+      <button id="d-choose" class="primary">Choose files…</button>
+    </div>
+    <div id="pending" class="pending" hidden><span></span><button id="send-pending" class="primary">Send</button><button id="unpend">Cancel</button></div>
+    <div id="drop" class="drop" data-file-drop-target>
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" style="stroke:var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+      <strong id="drop-title"></strong>
+      <span class="muted">Folders go as a whole. You can also drop on a device in the sidebar.</span>
+    </div>
+    <form id="pair" class="pair" hidden>
+      <strong id="pair-title"></strong>
+      <p class="muted">Enter the 6-digit code shown in airdrop on that device.</p>
+      <div class="row"><input id="code" inputmode="numeric" maxlength="6" placeholder="6-digit code" aria-label="Pair code" autocomplete="off"><button class="primary">Pair</button></div>
+    </form>
+    <div id="d-status" class="status" hidden></div>
+  </section>
+
+  <section id="v-none" class="view" hidden>
+    <div class="head"><div class="title"><h1 id="none-title">No other devices yet</h1></div></div>
+    <p id="none-text">Install airdrop on another computer in your tailnet, open it, and it will show up in the sidebar. Then pair using the 6-digit code it shows.</p>
+  </section>
+
+  <section id="v-iphone" class="view" hidden>
+    <div class="head"><div class="title"><h1>Send from your iPhone</h1></div></div>
     <p>Receiving must be on. With Tailscale on, scan this with the iPhone camera, then use Share → Add to Home Screen. Anyone with this code can send you files, so don't share it.</p>
     <img id="qr" class="qr" alt="QR code for the iPhone upload page">
-  </details>
+  </section>
 
-  <h2>Settings</h2>
-  <div class="card">
-    <label class="setting">Ask before receiving files<span class="switch"><input id="ask" type="checkbox"><span></span></span></label>
-    <label class="setting">Start at login<span class="switch"><input id="login" type="checkbox"><span></span></span></label>
-    <label class="setting">Add “Send with airdrop” to the right-click menu<span class="switch"><input id="menu" type="checkbox"><span></span></span></label>
-    <div class="setting">Received files<button id="opendir">Open folder</button></div>
-  </div>
+  <section id="v-settings" class="view" hidden>
+    <div class="head"><div class="title"><h1>Settings</h1></div></div>
+    <div class="card">
+      <label class="setting"><span class="what">Ask before receiving files<span>Only while this window is open; otherwise paired devices are trusted.</span></span><span class="switch"><input id="ask" type="checkbox"><span></span></span></label>
+      <label class="setting"><span class="what">Start at login<span>Opens in the background, ready to receive.</span></span><span class="switch"><input id="login" type="checkbox"><span></span></span></label>
+      <label class="setting"><span class="what">Add “Send with airdrop” to the right-click menu<span id="menu-where"></span></span><span class="switch"><input id="menu" type="checkbox"><span></span></span></label>
+      <div class="setting"><span class="what">Received files<span id="savedir"></span></span><button id="opendir">Open folder</button></div>
+    </div>
+  </section>
+
+  <section class="transfers" aria-labelledby="t-head">
+    <div class="th"><h2 id="t-head">Transfers</h2><span id="t-count" class="muted"></span><button id="t-clear" class="link">Clear finished</button></div>
+    <div id="t-list" class="tlist"><div class="empty">Nothing sent or received yet</div></div>
+  </section>
 </main>
 
 <script type="module">
@@ -112,133 +200,226 @@ import { Call, Events } from '/wails/runtime.js';
 const call = (m, ...args) => Call.ByName('main.App.' + m, ...args);
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const svg = html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }; // static icon markup only
+const isMac = navigator.platform.startsWith('Mac');
+$('menu-where').textContent = isMac ? 'Finder → right-click → Quick Actions' : 'Explorer → right-click → Send to';
+
+// ---- view state: which device is selected, which page the main pane shows
+let view = 'device', sel = null, peers = [], pending = [], pairCode = '';
+const status = {}; // peer name -> {text, error}
+
+function show(v) {
+  view = v;
+  const hasPeer = peers.some(p => p.Name === sel);
+  $('v-device').hidden = v !== 'device' || !hasPeer;
+  $('v-none').hidden = v !== 'device' || hasPeer;
+  $('v-iphone').hidden = v !== 'iphone';
+  $('v-settings').hidden = v !== 'settings';
+  document.querySelectorAll('.foot .item').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  renderPeers();
+}
+$('nav-iphone').onclick = () => show('iphone');
+$('nav-settings').onclick = () => show('settings');
 
 // ---- this device
 async function loadInfo() {
   const info = await call('Info');
   $('me').textContent = info.Name;
-  const sub = $('sub');
-  sub.replaceChildren();
   $('ask').checked = !info.AutoAccept;
   $('login').checked = info.StartAtLogin;
   $('menu').checked = info.ContextMenu;
+  $('savedir').textContent = info.SaveDir;
   showPending(info.Pending);
-  if (info.ServerError) { sub.className = 'sub bad'; sub.textContent = info.ServerError; return; }
+  const sub = $('sub');
+  if (info.ServerError) { sub.className = 'sub bad'; sub.replaceChildren(info.ServerError); return; }
   if (info.QR) $('qr').src = info.QR;
   pairCode = info.PairCode;
   showMode(info.Mode, info.Until);
 }
 
-// ---- receiving on / off (the tray menu has the same switch; "state" keeps both in sync)
-let pairCode = '';
 function showMode(mode, until) {
   const sub = $('sub');
   sub.className = 'sub';
-  sub.replaceChildren();
-  if (mode === 'off') sub.append(el('span', null, 'Not receiving. Others can\u2019t send to you.'));
-  else sub.append(el('span', null, mode === 'until' ? `Receiving until ${until} · pair code` : 'Receiving · pair code'), el('span', 'code', pairCode));
+  if (mode === 'off') sub.replaceChildren(el('span', 'dot'), el('span', null, 'Not receiving'));
+  else sub.replaceChildren(el('span', 'dot on'), el('span', null, mode === 'until' ? `Receiving until ${until} · pair code` : 'Receiving · pair code'), el('span', 'code', pairCode));
   $('mode').classList.toggle('off', mode === 'off');
   const pressed = mode === 'until' ? '10m' : mode;
   document.querySelectorAll('#mode button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === pressed));
 }
 document.querySelectorAll('#mode button').forEach(b => b.onclick = () => call('SetReceiving', b.dataset.mode));
 Events.On('state', ev => { if ($('sub').classList.contains('bad')) loadInfo(); else showMode(ev.data.mode, ev.data.until); }); // reload once the receiver comes up
+
 $('ask').onchange = e => call('SetAutoAccept', !e.target.checked);
 $('login').onchange = e => call('SetStartAtLogin', e.target.checked).catch(() => { e.target.checked = !e.target.checked; });
 $('menu').onchange = e => call('SetContextMenu', e.target.checked).catch(() => { e.target.checked = !e.target.checked; });
-
-// ---- files from the right-click menu: they wait here until you click a device
-let pending = [];
-function showPending(files) {
-  pending = files || [];
-  const box = $('pending');
-  box.hidden = !pending.length;
-  const name = f => f.split(/[\\/]/).pop();
-  box.querySelector('span').textContent = pending.length === 1 ? `Send “${name(pending[0])}” to…` : `Send ${pending.length} items to…`;
-  lastPeers = ''; refreshPeers(); // swap the peer buttons
-}
-Events.On('pending', ev => showPending(ev.data));
-$('unpend').onclick = () => call('ClearPending');
 $('opendir').onclick = () => call('OpenSaveDir');
 
-// ---- peers
-const status = {};   // peer name -> {text, error}
-let lastPeers = '';
+// ---- devices (sidebar)
+const icons = {
+  desktop: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></svg>',
+  laptop: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="10" rx="1.5"/><path d="M2 19h20"/></svg>',
+  phone: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg>',
+};
+const iconFor = os => /ios|android/i.test(os) ? icons.phone : /mac/i.test(os) ? icons.laptop : icons.desktop;
+const osName = os => ({ windows: 'Windows', linux: 'Linux', macos: 'macOS', ios: 'iOS', android: 'Android' })[(os || '').toLowerCase()] || os || 'Unknown system';
 
-function peerRow(p) {
-  const row = el('div', 'peer');
-  const top = el('div', 'row');
-  top.append(el('span', 'dot' + (p.Online ? ' on' : '')), el('span', 'pname', p.Name), el('span', 'os', p.OS));
-  row.append(top);
-  const actions = el('div', 'actions');
-  if (p.Paired) {
-    row.setAttribute('data-file-drop-target', '');
-    row.setAttribute('data-peer', p.Name);
-    const choose = el('button', 'primary', pending.length ? 'Send here' : 'Choose files…');
-    choose.onclick = () => call(pending.length ? 'SendPending' : 'ChooseAndSend', p.Name).catch(() => {});
-    const clip = el('button', null, 'Send clipboard');
-    clip.onclick = () => call('SendClipboard', p.Name).catch(() => {});
-    actions.append(choose, clip, el('span', 'hint', 'or drop files here'));
-  } else {
-    const pair = el('button', null, 'Pair…');
-    pair.onclick = () => {
-      actions.replaceChildren();
-      const code = el('input'); code.placeholder = '6-digit code'; code.inputMode = 'numeric'; code.maxLength = 6;
-      const go = el('button', 'primary', 'Pair');
-      const submit = async () => {
-        try { await call('Pair', p.Name, code.value.trim()); status[p.Name] = { text: '✓ Paired' }; lastPeers = ''; refreshPeers(); }
-        catch (err) { status[p.Name] = { text: String(err.message || err), error: true }; renderStatus(row, p.Name); }
-      };
-      go.onclick = submit;
-      code.onkeydown = e => e.key === 'Enter' && submit();
-      actions.append(code, go, el('span', 'hint', 'shown by its receiver'));
-      code.focus();
-    };
-    actions.append(pair);
-  }
-  row.append(actions);
-  renderStatus(row, p.Name);
-  return row;
-}
-
-function renderStatus(row, name) {
-  row.querySelector('.status')?.remove();
-  const s = status[name];
-  if (s) row.append(el('div', 'status' + (s.error ? ' bad' : ''), s.text));
-}
-
-async function refreshPeers() {
-  let peers;
-  try { peers = await call('Peers'); }
-  catch (err) { $('peers').replaceChildren(el('div', 'empty', 'Tailscale isn’t running')); lastPeers = ''; return; }
-  const key = JSON.stringify(peers);
-  if (key === lastPeers || document.activeElement?.tagName === 'INPUT') return; // don't wipe a half-typed pair code
-  lastPeers = key;
+function renderPeers() {
   const box = $('peers');
-  box.replaceChildren(...(peers.length ? peers.map(peerRow) : [el('div', 'empty', 'No other devices in your tailnet')]));
+  if (!peers.length) { box.replaceChildren(el('div', 'empty', 'None yet')); return; }
+  box.replaceChildren(...peers.map(p => {
+    const b = el('button', 'item' + (view === 'device' && p.Name === sel ? ' active' : ''));
+    b.append(svg(iconFor(p.OS)), el('span', 'n', p.Name));
+    if (p.Paired) {
+      b.append(el('span', 'dot' + (p.Online ? ' on' : '')));
+      b.setAttribute('data-file-drop-target', '');
+      b.setAttribute('data-peer', p.Name);
+    } else b.append(el('span', 'tag', 'Not paired'));
+    b.title = `${p.Name} · ${osName(p.OS)} · ${p.Online ? 'online' : 'offline'}`;
+    b.onclick = () => { sel = p.Name; show('device'); renderDevice(); };
+    return b;
+  }));
 }
 
-Events.On('status', ev => {
-  const d = ev.data;
-  status[d.peer] = { text: d.text, error: d.error };
-  const row = document.querySelector(`.peer[data-peer="${CSS.escape(d.peer)}"]`);
-  if (row) renderStatus(row, d.peer);
-});
+function renderDevice() {
+  const p = peers.find(p => p.Name === sel);
+  if (!p) return;
+  $('d-name').textContent = p.Name;
+  $('d-meta').textContent = [osName(p.OS), p.Online ? 'online' : 'offline', p.Paired ? 'paired' : 'not paired'].join(' · ');
+  for (const id of ['d-clip', 'd-choose', 'drop']) $(id).hidden = !p.Paired;
+  $('pending').hidden = !p.Paired || !pending.length;
+  $('drop').setAttribute('data-peer', p.Name);
+  $('drop-title').textContent = `Drop files or folders to send to ${p.Name}`;
+  $('pending').querySelector('span').textContent = pending.length === 1
+    ? `Send “${baseName(pending[0])}” to ${p.Name}?` : `Send ${pending.length} items to ${p.Name}?`;
+  const pairing = $('pair');
+  if (pairing.hidden === p.Paired && pairing.dataset.peer === p.Name) { /* unchanged: keep a half-typed code */ }
+  else { pairing.hidden = p.Paired; pairing.dataset.peer = p.Name; $('code').value = ''; }
+  $('pair-title').textContent = `Pair with ${p.Name}`;
+  const s = status[p.Name], st = $('d-status');
+  st.hidden = !s;
+  if (s) { st.textContent = s.text; st.className = 'status' + (s.error ? ' bad' : ''); }
+}
 
-// ---- received
-Events.On('received', ev => {
-  const d = ev.data, box = $('recv');
-  box.querySelector('.empty')?.remove();
-  const r = el('div', 'recv' + (d.path ? ' link' : ''));
-  r.append(el('span', 'n', d.name), el('span', 'f', d.from));
-  if (d.path) { r.title = 'Open ' + d.path; r.onclick = () => call('Open', d.path); }
-  box.prepend(r);
-  while (box.children.length > 8) box.lastChild.remove();
-});
+let lastPeers = '';
+async function refreshPeers() {
+  try { peers = await call('Peers'); }
+  catch { peers = []; $('none-title').textContent = 'Tailscale isn’t running'; $('none-text').textContent = 'Start Tailscale on this device; your other devices will appear in the sidebar.'; }
+  const key = JSON.stringify(peers);
+  if (key === lastPeers) return;
+  lastPeers = key;
+  if (peers.length) { $('none-title').textContent = 'No other devices yet'; }
+  if (!peers.some(p => p.Name === sel)) sel = (peers.find(p => p.Paired) || peers[0])?.Name ?? null; // paired + online sort first
+  show(view);
+  renderDevice();
+}
 
+$('d-choose').onclick = () => call('ChooseAndSend', sel).catch(() => {});
+$('d-clip').onclick = () => call('SendClipboard', sel).catch(() => {});
+$('pair').onsubmit = async e => {
+  e.preventDefault();
+  const name = sel;
+  try { await call('Pair', name, $('code').value.trim()); status[name] = { text: '✓ Paired. Drop files here to send.' }; lastPeers = ''; await refreshPeers(); }
+  catch (err) { status[name] = { text: String(err.message || err), error: true }; }
+  renderDevice();
+};
+Events.On('status', ev => { status[ev.data.peer] = { text: ev.data.text, error: ev.data.error }; renderDevice(); });
+
+// ---- files from the right-click menu: they wait until you send them to a device
+const baseName = f => f.split(/[\\/]/).pop();
+function showPending(files) {
+  pending = files || [];
+  if (pending.length && view !== 'device') show('device');
+  renderDevice();
+}
+Events.On('pending', ev => showPending(ev.data));
+$('send-pending').onclick = () => call('SendPending', sel).catch(() => {});
+$('unpend').onclick = () => call('ClearPending');
+
+// ---- transfers
+const transfers = new Map(); // id -> Transfer
+const rate = new Map();      // id -> {t, sent, bps}: smoothed speed while sending
+
+const size = n => n < 1e3 ? `${n} B` : n < 1e6 ? `${(n / 1e3).toFixed(0)} KB` : n < 1e9 ? `${(n / 1e6).toFixed(1)} MB` : `${(n / 1e9).toFixed(2)} GB`;
+const dur = s => s < 60 ? `${Math.max(1, Math.round(s))} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`;
+const ago = at => { const s = (Date.now() - new Date(at)) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : `${Math.floor(s / 3600)} h ago`; };
+const icon = {
+  up: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Sending"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+  sent: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Sent"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+  down: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ok-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Received"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
+  wait: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Waiting"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/></svg>',
+  fail: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--bad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Failed"><circle cx="12" cy="12" r="8"/><path d="M12 8v5M12 16v.01"/></svg>',
+};
+
+function track(t) {
+  if (t.State === 'sending') {
+    const now = performance.now(), r = rate.get(t.ID);
+    if (!r) rate.set(t.ID, { t: now, sent: t.Sent, bps: 0 });
+    else if (now - r.t > 100) {
+      const inst = (t.Sent - r.sent) / ((now - r.t) / 1000);
+      rate.set(t.ID, { t: now, sent: t.Sent, bps: r.bps ? r.bps * 0.7 + inst * 0.3 : inst });
+    }
+  } else rate.delete(t.ID);
+  transfers.set(t.ID, t);
+}
+
+function row(t) {
+  const r = el('div', 't');
+  const active = t.State === 'sending' || t.State === 'waiting';
+  r.append(svg(t.State === 'failed' ? icon.fail : t.State === 'waiting' ? icon.wait : !t.Up ? icon.down : t.State === 'sending' ? icon.up : icon.sent));
+  const body = el('div', 'body'), line = el('div', 'line');
+  const what = t.Folder ? 'folder' : t.Total ? size(t.Total) : '';
+  line.append(el('span', 'name', t.Name), el('span', 'info', [t.Up ? `to ${t.Peer}` : `from ${t.Peer}`, what, active ? '' : ago(t.At)].filter(Boolean).join(' · ')));
+  body.append(line);
+  if (t.State === 'sending') {
+    const pct = t.Total ? Math.min(100, t.Sent / t.Total * 100) : 0;
+    const bar = el('div', 'bar'), fill = el('div');
+    fill.style.width = pct.toFixed(1) + '%';
+    bar.append(fill);
+    bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-valuenow', Math.round(pct)); bar.setAttribute('aria-label', `Sending ${t.Name}`);
+    const bps = rate.get(t.ID)?.bps || 0;
+    const left = bps > 0 ? ` · about ${dur((t.Total - t.Sent) / bps)} left` : '';
+    body.append(bar, el('div', 'detail', t.Total && t.Sent >= t.Total ? 'Finishing…' : `${size(t.Sent)} of ${size(t.Total)}${bps ? ` · ${size(bps)}/s` : ''}${left}`));
+  } else if (t.State === 'waiting') body.append(el('div', 'detail', 'Waiting'));
+  else if (t.State === 'failed') body.append(el('div', 'detail bad', t.Error));
+  else if (t.State === 'cancelled') body.append(el('div', 'detail', 'Cancelled'));
+  r.append(body);
+  if (active) {
+    const x = el('button', 'x', '✕');
+    x.setAttribute('aria-label', `Cancel ${t.Name}`);
+    x.onclick = () => call('CancelTransfer', t.ID);
+    r.append(x);
+  } else if (!t.Up && t.Path) {
+    const open = el('button', 'link', 'Open');
+    open.onclick = () => call('Open', t.Path);
+    r.append(open);
+  }
+  return r;
+}
+
+function renderTransfers() {
+  const all = [...transfers.values()];
+  const live = all.filter(t => t.State === 'sending' || t.State === 'waiting').sort((a, b) => a.ID - b.ID);
+  const done = all.filter(t => !live.includes(t)).sort((a, b) => b.ID - a.ID);
+  const sending = live.filter(t => t.State === 'sending').length, waiting = live.length - sending;
+  $('t-count').textContent = [sending && `${sending} sending`, waiting && `${waiting} waiting`].filter(Boolean).join(' · ');
+  $('t-clear').hidden = !done.length;
+  const list = $('t-list');
+  list.replaceChildren(...(all.length ? [...live, ...done].map(row) : [el('div', 'empty', 'Nothing sent or received yet')]));
+}
+
+Events.On('transfer', ev => { track(ev.data); renderTransfers(); });
+$('t-clear').onclick = async () => {
+  await call('ClearFinished');
+  for (const [id, t] of transfers) if (t.State !== 'sending' && t.State !== 'waiting') transfers.delete(id);
+  renderTransfers();
+};
+
+// ---- start
 loadInfo();
 refreshPeers();
+call('Transfers').then(ts => { ts.forEach(track); renderTransfers(); });
 setInterval(refreshPeers, 5000);
+setInterval(renderTransfers, 30000); // keep "2 min ago" honest
 </script>
 </body>
 </html>
